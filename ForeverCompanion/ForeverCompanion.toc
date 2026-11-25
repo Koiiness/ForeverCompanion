@@ -1,0 +1,25 @@
+## Interface: 16001
+## Title: Forever Companion
+## Notes: Tracks gear, bags, professions and recipes; advises on upgrades, talents, questing and vendor / disenchant / AH decisions.
+## Author: You
+## Version: 0.1.0
+## SavedVariables: ForeverCompanionDB
+## OptionalDeps: TradeSkillMaster, Auctionator, AtlasLootClassic, QuestieDB, Questie
+## IconTexture: Interface\Icons\INV_Misc_Book_09
+
+Data.lua
+Core.lua
+Compat.lua
+Prices.lua
+Gear.lua
+Bags.lua
+Professions.lua
+Spec.lua
+Disposition.lua
+Research.lua
+Crates.lua
+Quests.lua
+QuestDB.lua
+Tooltip.lua
+UI.lua
+Minimap.lua
