@@ -349,3 +349,30 @@ D.StatNames = {
     mp5 = "Mana per 5", dps = "Weapon DPS",
 }
 D.PercentStats = { crit = true, hit = true, dodge = true, parry = true, block = true }
+
+----------------------------------------------------------------------
+-- Gathering: what each gathering profession can collect, with the skill
+-- needed (Classic values). { itemID, name, skill }
+----------------------------------------------------------------------
+D.Gathering = {
+    Herbalism = {
+        { 2447, "Peacebloom", 1 }, { 765, "Silverleaf", 1 }, { 2449, "Earthroot", 15 }, { 785, "Mageroyal", 50 },
+        { 2450, "Briarthorn", 70 }, { 3820, "Stranglekelp", 85 }, { 2453, "Bruiseweed", 100 },
+        { 3355, "Wild Steelbloom", 115 }, { 3369, "Grave Moss", 120 }, { 3356, "Kingsblood", 125 },
+        { 3357, "Liferoot", 150 }, { 3818, "Fadeleaf", 160 }, { 3821, "Goldthorn", 170 },
+        { 3358, "Khadgar's Whisker", 185 }, { 3819, "Wintersbite", 195 }, { 4625, "Firebloom", 205 },
+        { 8831, "Purple Lotus", 210 }, { 8836, "Arthas' Tears", 220 }, { 8838, "Sungrass", 230 },
+        { 8839, "Blindweed", 235 }, { 8845, "Ghost Mushroom", 245 }, { 8846, "Gromsblood", 250 },
+        { 13464, "Golden Sansam", 260 }, { 13463, "Dreamfoil", 270 }, { 13465, "Mountain Silversage", 280 },
+        { 13466, "Plaguebloom", 285 }, { 13467, "Icecap", 290 }, { 13468, "Black Lotus", 300 },
+    },
+    Mining = {
+        { 2770, "Copper Ore", 1 }, { 2771, "Tin Ore", 65 }, { 2775, "Silver Ore", 75 }, { 2772, "Iron Ore", 125 },
+        { 2776, "Gold Ore", 155 }, { 3858, "Mithril Ore", 175 }, { 7911, "Truesilver Ore", 230 },
+        { 11370, "Dark Iron Ore", 230 }, { 10620, "Thorium Ore", 245 },
+    },
+    Skinning = {
+        { 2318, "Light Leather", 1 }, { 2319, "Medium Leather", 100 }, { 4234, "Heavy Leather", 150 },
+        { 4304, "Thick Leather", 200 }, { 8170, "Rugged Leather", 250 },
+    },
+}

@@ -18,6 +18,7 @@ Spec.lua
 Disposition.lua
 Research.lua
 Crates.lua
+Money.lua
 Quests.lua
 QuestDB.lua
 Tooltip.lua

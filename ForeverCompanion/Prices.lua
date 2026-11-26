@@ -224,6 +224,10 @@ function P.RelevantSet()
         if row[6] then set[row[6]] = true end
     end
     set[ns.Data.NexusCrystal] = true
+    -- Gathered materials, for the money plan.
+    for _, list in pairs(ns.Data.Gathering or {}) do
+        for _, g in ipairs(list) do set[g[1]] = true end
+    end
     local fills = {}
     for _, tier in pairs(ns.Crates and ns.Crates.Fills or {}) do
         for _, list in pairs(tier) do for _, f in ipairs(list) do fills[f[1]] = true end end

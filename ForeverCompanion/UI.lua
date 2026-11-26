@@ -33,6 +33,7 @@ local ICONS = {
     Professions = "Interface\\Icons\\Trade_BlackSmithing",
     Talents = "Interface\\Icons\\Ability_Marksmanship",
     Quests = "Interface\\Icons\\INV_Misc_Note_01",
+    Money = "Interface\\Icons\\INV_Misc_Coin_01",
     Repair = "Interface\\Icons\\Trade_BlackSmithing",
     Coin = "Interface\\Icons\\INV_Misc_Coin_02",
     Quest = "Interface\\GossipFrame\\ActiveQuestIcon",
@@ -40,7 +41,7 @@ local ICONS = {
     Clock = "Interface\\Icons\\INV_Misc_PocketWatch_01",
     Trainer = "Interface\\Icons\\INV_Misc_Book_11",
 }
-local PAGE_ORDER = { "Overview", "Gear", "Bags", "Professions", "Talents", "Quests" }
+local PAGE_ORDER = { "Overview", "Gear", "Bags", "Money", "Professions", "Talents", "Quests" }
 local PAGE_HINTS = {
     Overview = "Click a to-do item to jump to its page.",
     Gear = "Hover an item for full details. Shift-click to link it in chat.",
@@ -48,6 +49,7 @@ local PAGE_HINTS = {
     Professions = "Open each profession window once so its recipes are recorded.",
     Talents = "Talents come from the game's own tree for your spec.",
     Quests = "Quest colors match the game: yellow gives the best XP for your level.",
+    Money = "Covers every character you've logged in with this addon. Prices come from your AH scans.",
 }
 
 ----------------------------------------------------------------------
@@ -512,6 +514,16 @@ pages.Overview = function()
                 onClick = go("Professions") })
         n = n + 1
     end
+    do
+        local ok, mp = pcall(ns.MoneyPlan.Plan)
+        if ok and mp and (mp.crafts[1] or #mp.mail > 0) then
+            local bits = {}
+            if mp.crafts[1] then bits[#bits + 1] = "craft " .. mp.crafts[1].recipe .. " (+" .. M(mp.crafts[1].profit) .. " each)" end
+            if #mp.mail > 0 then bits[#bits + 1] = "mail greens to your enchanter" end
+            P.Row({ icon = ICONS.Money, title = "Make gold", sub = table.concat(bits, ", "), onClick = go("Money") })
+            n = n + 1
+        end
+    end
     if totals.AH + totals.DE + totals.VENDOR > 0 then
         local parts = {}
         if totals.AH > 0 then parts[#parts + 1] = "auction ~" .. M(totals.AH) end
@@ -807,6 +819,80 @@ pages.Professions = function()
         P.Header("Your other characters")
         for _, o in ipairs(others) do P.Row({ title = o[1], sub = o[2] }) end
     end
+end
+
+pages.Money = function()
+    local plan = ns.MoneyPlan.Plan()
+    local best = plan.crafts[1]
+    P.Tiles({
+        { M(plan.totalGold), "Gold on all characters", GOLD },
+        { M(plan.totalCash), "Ready to cash in", GREEN },
+        { best and M(best.profit) or "--", "Best craft profit (each)" },
+        { plan.enchanter and plan.enchanter.rank or "none", "Your best Enchanting skill", PURPLE },
+    })
+    if not next(ns.db.prices) and not TSM_API and not (Auctionator and Auctionator.API) then
+        P.Note("No auction prices yet. Open the auction house once and a price scan runs by itself; this page fills in after that.", GOLD)
+    end
+
+    P.Header("Cash in", M(plan.totalCash))
+    local any = false
+    for _, row in ipairs(plan.chars) do
+        if row.total > 0 then
+            any = true
+            local parts = {}
+            if row.ah > 0 then parts[#parts + 1] = string.format("auction %d item%s ~%s", row.ahItems, row.ahItems > 1 and "s" or "", M(row.ah)) end
+            if row.mailDE > 0 then parts[#parts + 1] = "disenchant ~" .. M(row.mailDE) end
+            if row.junk > 0 then parts[#parts + 1] = "vendor junk " .. M(row.junk) end
+            local me = row.char == ns.char
+            P.Row({ icon = ICONS.Coin, title = row.label .. color(GRAY, "  ·  " .. M(row.gold) .. " on hand") .. (me and color(BLUE, "  (you)") or ""),
+                    sub = table.concat(parts, ", "), right = color(GREEN, M(row.total)), onClick = me and go("Bags") or nil })
+        end
+    end
+    if not any then P.Note("Nothing to sell right now on any character (as of their last login).", GRAY) end
+
+    if plan.enchanter and #plan.mail > 0 then
+        P.Header("Mail to your enchanter", ns.CharLabel(plan.enchanter.char))
+        P.Note("These unbound items are worth more as enchanting materials than sold. Mail them to "
+            .. ns.CharLabel(plan.enchanter.char) .. " to disenchant.", GRAY)
+        for _, row in ipairs(plan.mail) do
+            local links = {}
+            for i = 1, math.min(3, #row.mailItems) do links[#links + 1] = row.mailItems[i].link or row.mailItems[i].name end
+            local more = #row.mailItems - 3
+            P.Row({ icon = ICONS.Bags, title = "From " .. row.label,
+                    sub = table.concat(links, ", ") .. (more > 0 and color(GRAY, " and " .. more .. " more") or ""),
+                    right = color(PURPLE, "~" .. M(row.mailDE)) })
+        end
+    end
+
+    P.Header("Craft and sell", "profit after materials")
+    if #plan.crafts == 0 then
+        P.Note("No profitable recipes found yet. Open each character's profession windows once so recipes are recorded, and scan the AH.", GRAY)
+    end
+    for i = 1, math.min(6, #plan.crafts) do
+        local cr = plan.crafts[i]
+        local link = select(2, ns.C.GetItemInfo(cr.item))
+        P.Row({ link = link, title = color(GOLD, cr.recipe) .. color(GRAY, "  ·  " .. cr.who .. ", " .. cr.prof),
+                sub = string.format("Sells for ~%s after the AH cut; materials ~%s%s", M(cr.value), M(cr.cost),
+                    cr.estimated and color(GRAY, " (some at vendor price)") or ""),
+                right = color(GREEN, "+" .. M(cr.profit)) })
+    end
+
+    if #plan.gather > 0 then
+        P.Header("Gather and sell")
+        for _, g in ipairs(plan.gather) do
+            local parts = {}
+            for i = 1, math.min(3, #g.best) do parts[#parts + 1] = g.best[i].name .. " ~" .. M(g.best[i].price) end
+            local nextLine
+            if g.nextUp then
+                nextLine = color(GRAY, string.format("At %d skill: %s%s", g.nextUp.skill, g.nextUp.name,
+                    g.nextUp.price and (" ~" .. M(g.nextUp.price) .. " each") or ""))
+            end
+            P.Row({ icon = ICONS.Zone, title = g.who .. color(GRAY, string.format("  ·  %s %d", g.prof, g.rank)),
+                    sub = #parts > 0 and ("Best to farm: " .. table.concat(parts, ", ") .. " each") or color(GRAY, "No prices yet for what they can gather"),
+                    sub2 = nextLine })
+        end
+    end
+    P.Note("Other characters' numbers are from the last time you logged in on them. Log in on each once (and open their bank and profession windows) to include them.", GRAY)
 end
 
 pages.Talents = function()
