@@ -16,6 +16,8 @@ Built for the Forever client 1.60.1 (Interface 16001).
 - **Quests.** XP per hour, time to level, a quest log sorted by difficulty, and zones for your level.
 - **Tracking.** Gear, bags and bank across all your characters (`/fc find <item>`), with prices from your own auction house scans.
 - **Celebrations.** A card with a sound when you get an upgrade (tap Equip to wear it), when you pick up gear for a few levels from now, and when you level up. `/fc celebrate` turns them off; `/fc testcard` shows a sample.
+- **Coming soon.** Gear that unlocks in the next few levels (Gear page), and what your next level brings at the top of your plan.
+- **Tips for newer players.** A short tip the first time something comes up, with Got it so it never returns; Settings has an "I know WoW" switch to hide them all.
 
 ## Install
 

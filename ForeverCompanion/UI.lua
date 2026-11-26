@@ -385,6 +385,45 @@ function P.Choices(label, choices)
 end
 
 
+-- A teaching tip shown just in time, once. "Got it" hides it for good;
+-- the "I know WoW" setting hides all tips.
+function P.Tip(key, text)
+    if sec.skipping then return end
+    if ns.db.settings.knowWoW then return end
+    ns.db.tipsSeen = ns.db.tipsSeen or {}
+    if ns.db.tipsSeen[key] then return end
+    local w = acquire("tip", function()
+        local f = newBackdrop(content, 0.10, 0.16, 0.22, 0.95)
+        f:SetBackdropBorderColor(ACCENT[1], ACCENT[2], ACCENT[3], 0.6)
+        f.icon = f:CreateTexture(nil, "ARTWORK")
+        f.icon:SetSize(24, 24)
+        f.icon:SetPoint("TOPLEFT", 10, -10)
+        f.icon:SetTexture("Interface\\Icons\\INV_Misc_Book_11")
+        f.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        f.text:SetPoint("TOPLEFT", 44, -10)
+        f.text:SetJustifyH("LEFT")
+        f.text:SetJustifyV("TOP")
+        f.text:SetSpacing(2)
+        f.button = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+        f.button:SetSize(90, 30)
+        f.button:SetPoint("BOTTOMRIGHT", -10, 10)
+        f.button:SetText("Got it")
+        f.button:SetScript("OnClick", function(self)
+            ns.db.tipsSeen[self.key] = true
+            ns.RenderUI()
+        end)
+        return f
+    end)
+    w.button.key = key
+    w.text:SetWidth(CONTENT_W - 44 - 110)
+    w.text:SetText(text)
+    local h = math.max(54, w.text:GetStringHeight() + 22)
+    if y > 0 then y = y + 6 end
+    place(w, h)
+    y = y + 8
+end
+
 function P.Note(text, hex)
     if sec.skipping then return end
     local w = acquire("note", function()
@@ -455,6 +494,20 @@ pages.Overview = function()
     local QD = ns.QuestDB
     local xpLeft = level < maxLevel and (s.max - s.xp) or nil
     P.Header("Your plan", xpLeft and string.format("level %d  ·  %d XP to %d", level, xpLeft, level + 1) or ("level " .. level))
+    P.Tip("plan", "This plan updates as you play. It picks quests, zones and dungeons that fit your level and your gear. Tap any row for details; nothing here is required.")
+
+    -- Something to look forward to: what the next level brings.
+    if level < maxLevel then
+        local nl = ns.Research.NextLevel()
+        local bits = {}
+        if nl.talent then bits[#bits + 1] = "a talent point" end
+        if nl.spells then bits[#bits + 1] = #nl.spells == 1 and nl.spells[1] or (#nl.spells .. " new spells at your trainer") end
+        for i = 1, math.min(2, #nl.items) do bits[#bits + 1] = nl.items[i] end
+        if #bits > 0 then
+            P.Row({ icon = "Interface\\Icons\\Spell_Holy_SurgeOfLight", title = string.format("Next up: level %d", nl.level),
+                    sub = "Brings " .. table.concat(bits, ", "), right = color(PURPLE, xpLeft .. " XP to go"), onClick = go("Gear") })
+        end
+    end
 
     local function upgradeList(items, n)
         local parts = {}
@@ -672,6 +725,7 @@ pages.Gear = function()
 
     P.Section("Upgrades", "Upgrades", 1)
     P.Header("Upgrades in your bags", #ups > 0 and color(GREEN, #ups .. " found") or nil)
+    P.Tip("upgrades", "Green numbers show how much better an item is for your spec. Stats matter more than item level: the Spec & stats tab shows which stats help you most.")
     if #ups == 0 then P.Note("None right now. Gear you loot is checked automatically.", GRAY) end
     for _, u in ipairs(ups) do
         P.Row({ link = u.link, sub = "Replaces " .. (u.cmp.current or "an empty slot") .. " in " .. (D.SlotNames[u.cmp.slot] or "?")
@@ -737,6 +791,21 @@ pages.Gear = function()
     end
     for _, hint in ipairs(R.MissingData()) do P.Note(hint, GRAY) end
 
+    -- Coming soon: upgrades that unlock in the next few levels.
+    P.Section("Soon", "Coming soon", 1.5)
+    P.Header("Coming soon", "unlocks in the next few levels")
+    local soon = ns.Research.ComingSoon(4)
+    if #soon == 0 then
+        P.Note("Nothing new unlocks in the next few levels yet. Quest rewards and dungeon drops show up here as the addon finds them.", GRAY)
+    end
+    for i = 1, math.min(8, #soon) do
+        local f = soon[i]
+        local main, detail = ns.Research.Describe(f)
+        P.Row({ link = f.link, title = color(GOLD, "Level " .. f.reqLevel) .. "   " .. f.link,
+                sub = (D.SlotNames[f.slot] or "") .. ": " .. main, sub2 = detail, sub3 = ns.Gear.Why(f.link, f.cmp),
+                right = color(GREEN, string.format("+%.1f", f.cmp.delta)) })
+    end
+
     P.Section("Equipped", "Equipped", 2)
     P.Header("Equipped")
     for _, slot in ipairs(D.SlotOrder) do
@@ -787,6 +856,13 @@ pages.Bags = function()
             local total = action == "AH" and totals.AH or action == "DE" and totals.DE or action == "VENDOR" and totals.VENDOR or nil
             P.Section(action, short[action] .. " (" .. counts[action] .. ")", i)
             P.Header(ns.Disposition.Labels[action] .. "  " .. color("ffffff", title), total and M(total) or nil)
+            local bagTips = {
+                AH = "The auction house sells to other players. It keeps 5% of the sale, and listing costs a small deposit you get back if it sells.",
+                DE = "Disenchanting (part of Enchanting) breaks gear into enchanting materials. Hover an item to see what it can turn into.",
+                VENDOR = "Gray items are junk: any merchant buys them. The Sell gray junk button below does it in one tap at a vendor.",
+                KEEP = "Kept items are things you'll use: upgrades, potions and food, profession tools, and crafting materials.",
+            }
+            P.Tip("bags-" .. action, bagTips[action])
             P.Note(why .. (sectionNotes[action] and ("  " .. sectionNotes[action]) or ""), GRAY)
             for _, a in ipairs(list) do
                 if a.action == action then
@@ -812,7 +888,7 @@ pages.Professions = function()
     local CR = ns.Crates
     local profs = c.professions or {}
     if #profs == 0 then
-        P.Note("You haven't learned any professions yet. Profession trainers are in every capital city.", GRAY)
+        P.Note("No professions yet. A gathering pair is the easiest start: Herbalism or Mining earns gold from level 5 while you quest, and Skinning goes with either. Profession trainers are in every capital city.", GRAY)
         return
     end
 
@@ -844,6 +920,7 @@ pages.Professions = function()
     for pi, p in ipairs(profs) do
         P.Section(p.name, p.name, pi)
         P.Header(p.name, string.format("%d / %d", p.rank or 0, p.max or 0))
+        P.Tip("professions", "You can learn two main professions, plus Cooking, First Aid and Fishing. Recipe colors show skill points: orange always gives one, yellow usually, green sometimes, gray never.")
         P.Bar("Skill", p.rank or 0, p.max or 0, (p.rank or 0) >= (p.max or 1) and "ff8040" or "4cc94c")
         local hint = PR.TrainerHint(p)
         if hint then P.Row({ icon = ICONS.Trainer, title = color(GOLD, hint) }) end
@@ -945,6 +1022,7 @@ pages.Money = function()
         local spendable = GO.Spendable()
         P.Section("Safety", "Safety net", 0)
         P.Header("Your gold safety net", "on this character")
+        P.Tip("safety", "Your safety net keeps gold for what every character needs: new spells from your class trainer, and repairs. Gold above it is yours to spend on fun.")
         P.Row({ icon = ICONS.Coin, title = "Spendable", sub = "What you can spend on crafting and the AH without touching your safety net",
                 right = color(spendable > 0 and GREEN or RED, M(spendable)) })
         P.Row({ icon = ICONS.Repair, title = "Safety net", sub = "Kept aside for the things you'll need", right = M(reserve) })
@@ -1076,6 +1154,12 @@ pages.Settings = function()
         { label = "Show everything", active = not onOff("noGrind", true), onClick = set("noGrind", false) },
     })
 
+    P.Choices("Tips for newer players:", {
+        { label = "Show tips", active = not s.knowWoW, onClick = set("knowWoW", false) },
+        { label = "I know WoW (hide tips)", active = s.knowWoW == true, onClick = set("knowWoW", true) },
+        { label = "Show all tips again", active = false, onClick = function() ns.db.tipsSeen = {} s.knowWoW = false ns.RenderUI() end },
+    })
+
     P.Section("Gold", "Gold", 2)
     P.Header("Gold safety net")
     local levels = s.reserveLevels or 4
@@ -1184,6 +1268,7 @@ pages.Talents = function()
         end
         P.Section("Next", "Best next", 1)
         P.Header("Best talent to take next", g.build.name)
+        P.Tip("talents", "You get a talent point every level from 10. This shows the next pick in a proven leveling build; your class trainer can reset talents for a small fee if you change your mind.")
         if g.best then
             local b = g.best
             P.Row({ icon = ICONS.Talents, title = color(GOLD, b.name) .. string.format("   rank %d of %d", b.rank + 1, b.max),
@@ -1260,6 +1345,7 @@ pages.Quests = function()
     end
     P.Section("Active", "In progress (" .. #t.active .. ")", 2)
     P.Header("In progress", "best first")
+    P.Tip("quests", "Quest colors compare the quest to your level: yellow and orange give the best XP, green is quick and easy, gray gives little XP, red is too hard for now.")
     if #t.active == 0 then P.Note("Your quest log is empty. Pick up quests in one of the zones below.", GRAY) end
     for _, q in ipairs(t.active) do
         local hex = ns.Quests.DiffHex[q.diff]

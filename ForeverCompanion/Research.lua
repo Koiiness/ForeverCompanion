@@ -355,6 +355,54 @@ function R.Best(slot)
     return best
 end
 
+-- Coming soon: upgrades you can't wear yet but will within `levels` levels,
+-- soonest first. Each entry is a ForSlot entry plus .slot.
+function R.ComingSoon(levels)
+    local level = UnitLevel("player")
+    levels = levels or 4
+    local out, seen = {}, {}
+    for _, slot in ipairs(D.SlotOrder) do
+        for _, list in pairs(R.ForSlot(slot, 3)) do
+            for _, e in ipairs(list) do
+                if e.reqLevel > level and e.reqLevel <= level + levels and not seen[e.id] then
+                    seen[e.id] = true
+                    e.slot = slot
+                    out[#out + 1] = e
+                end
+            end
+        end
+    end
+    table.sort(out, function(a, b)
+        if a.reqLevel ~= b.reqLevel then return a.reqLevel < b.reqLevel end
+        if a.cmp.delta ~= b.cmp.delta then return a.cmp.delta > b.cmp.delta end
+        return a.id < b.id
+    end)
+    return out
+end
+
+-- What the next level brings: talent point, trainer spells, gear that unlocks.
+function R.NextLevel()
+    local level = UnitLevel("player")
+    local nextL = level + 1
+    local out = { level = nextL, items = {} }
+    if nextL >= 10 then out.talent = true end
+    for _, s in ipairs(ns.char and ns.char.training or {}) do
+        if s.level == nextL then
+            out.spells = out.spells or {}
+            out.spells[#out.spells + 1] = s.name
+        end
+    end
+    -- Gear already in your bags that unlocks at the next level.
+    for _, u in ipairs(ns.Gear.BagUpgrades()) do
+        local req = select(5, C.GetItemInfo(u.link)) or 0
+        if req == nextL then out.items[#out.items + 1] = u.link end
+    end
+    for _, e in ipairs(R.ComingSoon(1)) do
+        if #out.items < 3 then out.items[#out.items + 1] = e.link end
+    end
+    return out
+end
+
 -- One line saying where to get it and what it costs.
 function R.Describe(entry)
     local s = entry.source
