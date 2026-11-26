@@ -808,6 +808,7 @@ pages.Professions = function()
                 else
                     why = color(GREEN, "Profit ~" .. M(g.profit) .. " each") .. color(GRAY, " (sells for more than its materials)")
                 end
+                if (g.gap or 0) > 0 then why = why .. color("ff8040", string.format("  ·  %d skill points away", g.gap)) end
                 local link = select(2, ns.C.GetItemInfo(g.r.item))
                 local gmp = ns.Mats.Plan(g.r, g.plan.value)
                 P.Row({ link = link, title = g.name, sub = why, sub2 = color(GRAY, "Get it: ") .. g.where,

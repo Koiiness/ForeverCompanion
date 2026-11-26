@@ -390,6 +390,8 @@ function R.Describe(entry)
             if s.source and s.source ~= "" then parts[#parts + 1] = s.source end
             local qdText = ns.QuestDB and ns.QuestDB.PatternSourceText(s.recipe)
             if qdText then parts[#parts + 1] = "pattern " .. qdText end
+            local train = ns.Professions.TrainInfo(s.recipe, entry.id, s.prof)
+            if train and (train.fromTrainer or not qdText) then table.insert(parts, 1, ns.Professions.TrainText(train)) end
             local drop = R.PatternDrop(s.recipe)
             if drop then
                 parts[#parts + 1] = "pattern drops in " .. drop.instance .. (drop.boss and (", " .. drop.boss) or "")
@@ -399,7 +401,7 @@ function R.Describe(entry)
             if price then parts[#parts + 1] = "pattern on AH ~" .. ns.Money(price)
             elseif patternID then parts[#parts + 1] = "pattern seen on AH" end
             if #parts > 0 then
-                detail = "|cffffd100Get the pattern:|r " .. table.concat(parts, "; ")
+                detail = "|cffffd100How to learn it:|r " .. table.concat(parts, "; ")
             elseif ns.QuestDB and ns.QuestDB.Has() and not ns.QuestDB.nameIndexReady then
                 detail = "|cff9a9a9aLooking up where to get the pattern...|r"
             else

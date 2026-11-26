@@ -323,6 +323,12 @@ function PR.ToGet(profName, limit)
             local profit = plan.profit and plan.profit > 0 and plan.profit or nil
             if upgrade or profit then
                 local where, cost = {}, nil
+                local train = PR.TrainInfo(name, r.item, profName)
+                local qdHas = ns.QuestDB and ns.QuestDB.PatternSources(name)
+                if train and (train.fromTrainer or not qdHas) then
+                    where[#where + 1] = PR.TrainText(train)
+                    if train.cost and train.cost > 0 then cost = ns.Money(train.cost) end
+                end
                 if r.source and r.source ~= "" then where[#where + 1] = r.source end
                 local qdText = ns.QuestDB and ns.QuestDB.PatternSourceText(name)
                 if qdText then where[#where + 1] = qdText end
@@ -338,8 +344,9 @@ function PR.ToGet(profName, limit)
                     where[#where + 1] = "drops in " .. drop.instance .. (drop.boss and (", " .. drop.boss) or "")
                         .. (drop.rate and (" " .. ns.Research.FormatRate(drop.rate)) or "")
                 end
+                local gap = train and train.gap or 0
                 out[#out + 1] = { name = name, r = r, plan = plan, upgrade = upgrade, delta = upgrade and a.cmp.delta or 0,
-                                  profit = profit, where = #where > 0 and table.concat(where, "; ") or "source unknown", cost = cost }
+                                  profit = profit, where = #where > 0 and table.concat(where, "; ") or "source unknown", cost = cost, gap = gap }
             end
         end
     end
@@ -406,3 +413,86 @@ function PR.Cleanup(char)
 end
 
 ns:Listen("PROFESSIONS_CHANGED", function() PR.Cleanup() end)
+
+----------------------------------------------------------------------
+-- Trainers: when you talk to a profession trainer, record every recipe it
+-- teaches with its required skill, cost and level (shared by all your
+-- characters). AtlasLoot's crafting data fills in the required skill for
+-- recipes whose trainer you haven't visited.
+----------------------------------------------------------------------
+local function recordTrainer()
+    if not (GetNumTrainerServices and GetTrainerServiceInfo) then return end
+    -- Show every service while reading, then put the filters back.
+    local saved = {}
+    if GetTrainerServiceTypeFilter and SetTrainerServiceTypeFilter then
+        for _, f in ipairs({ "available", "unavailable", "used" }) do
+            saved[f] = GetTrainerServiceTypeFilter(f)
+            SetTrainerServiceTypeFilter(f, 1)
+        end
+    end
+    local npc, zone = UnitName("npc"), GetZoneText and GetZoneText()
+    ns.db.trainer = ns.db.trainer or {}
+    local count, prof = 0, nil
+    for i = 1, GetNumTrainerServices() do
+        local name, _, category = GetTrainerServiceInfo(i)
+        if name and category ~= "header" then
+            local skillName, skillRank
+            if GetTrainerServiceSkillReq then skillName, skillRank = GetTrainerServiceSkillReq(i) end
+            if skillName and D.ProfessionNames[skillName] then
+                prof = skillName
+                local cost = GetTrainerServiceCost and GetTrainerServiceCost(i)
+                local level = GetTrainerServiceLevelReq and GetTrainerServiceLevelReq(i)
+                ns.db.trainer[name] = { prof = skillName, skill = tonumber(skillRank) or 0, cost = cost or 0,
+                                        level = level or 0, npc = npc, zone = zone, t = time() }
+                count = count + 1
+            end
+        end
+    end
+    for f, v in pairs(saved) do SetTrainerServiceTypeFilter(f, v and 1 or 0) end
+    if count > 0 then
+        ns:Print(string.format("recorded %d %s recipes from %s.", count, prof or "trainer", npc or "this trainer"))
+        if ns.Research then ns.Research.Invalidate() end
+    end
+end
+ns:On("TRAINER_SHOW", function() C_Timer.After(0.5, function() pcall(recordTrainer) end) end)
+
+-- Required skill for a recipe: from a trainer you've visited, else AtlasLoot.
+local function atlasSkill(itemID)
+    local AL = _G.AtlasLoot
+    local P = AL and AL.Data and AL.Data.Profession
+    if not (P and itemID and P.GetCraftSpellForCreatedItem) then return end
+    local ok, spell = pcall(P.GetCraftSpellForCreatedItem, itemID)
+    if not ok or not spell then return end
+    local d = P.GetProfessionData(spell)
+    return d and d[3]
+end
+
+-- How to learn a recipe from a trainer, if that's where it comes from.
+-- Returns { skill, have, gap, cost, level, npc, zone, known = visited trainer } or nil.
+function PR.TrainInfo(recipeName, itemID, profName)
+    local t = ns.db.trainer and ns.db.trainer[recipeName]
+    local skill = t and t.skill or atlasSkill(itemID)
+    if not skill or skill == 0 then return end
+    local prof = (t and t.prof) or profName
+    local have = prof and PR.Rank(prof) or 0
+    return { prof = prof, skill = skill, have = have, gap = math.max(0, skill - have), cost = t and t.cost,
+             level = t and t.level, npc = t and t.npc, zone = t and t.zone, fromTrainer = t ~= nil }
+end
+
+-- One line: "Trainer (Name, Zone): Tailoring 190, you're 145 (45 to go), costs 1g 50s".
+function PR.TrainText(info)
+    if not info then return end
+    local parts = {}
+    local skill = string.format("%s %d", info.prof or "skill", info.skill)
+    if info.gap > 0 then
+        skill = skill .. string.format(", you're %d |cffff8040(%d to go)|r", info.have, info.gap)
+    else
+        skill = skill .. " |cff4cff4c(your skill is high enough)|r"
+    end
+    parts[#parts + 1] = skill
+    if info.cost and info.cost > 0 then parts[#parts + 1] = "costs " .. ns.Money(info.cost) end
+    if info.level and info.level > UnitLevel("player") then parts[#parts + 1] = "|cffff8040character level " .. info.level .. "|r" end
+    local who = info.fromTrainer and ("Trainer" .. (info.npc and (" " .. info.npc) or "") .. (info.zone and (", " .. info.zone) or ""))
+        or "Needs"
+    return who .. ": " .. table.concat(parts, ", ")
+end
