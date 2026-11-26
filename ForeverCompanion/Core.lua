@@ -200,6 +200,12 @@ ns:On("PLAYER_LOGIN", function()
     char.professions = char.professions or {}
     char.recipes = char.recipes or {}
     char.reagents = char.reagents or {}
+    -- Bank snapshots from before banks recorded their owner may belong to another
+    -- character; drop them (they come back the next time you open your bank).
+    if char.bank and #char.bank > 0 and char.bankGuid ~= char.guid then
+        char.bank = {}
+        char.bankTime = nil
+    end
     ns.char = char
     ns:Fire("READY")
     ns:Print("loaded. Type |cffffff00/fc|r to open, |cffffff00/fc help|r for commands.")
@@ -331,4 +337,42 @@ end
 ns:Listen("READY", function()
     for _, e in ipairs(pendingErrors) do ns:LogError("lua (startup)", e) end
     wipe(pendingErrors)
+end)
+
+----------------------------------------------------------------------
+-- Resetting saved character data (prices, notes and settings are kept).
+----------------------------------------------------------------------
+local function freshChar(char)
+    for _, k in ipairs({ "gear", "bags", "bank", "professions", "recipes", "reagents" }) do char[k] = {} end
+    char.bankTime, char.bankGuid, char.avgIlvl, char.favor = nil, nil, nil, nil
+end
+
+StaticPopupDialogs["FOREVERCOMPANION_RESET"] = {
+    text = "Clear Forever Companion's saved data for %s?\n\nPrices, notes and settings are kept. Bags and gear refresh right away; open your bank and profession windows again to record them.",
+    button1 = YES, button2 = NO,
+    OnAccept = function(_, all)
+        if all then
+            for key, char in pairs(ns.db.chars) do
+                if char == ns.char then freshChar(char) else ns.db.chars[key] = nil end
+            end
+        else
+            freshChar(ns.char)
+        end
+        if ns.Research then ns.Research.Invalidate() end
+        if ns.Bags then ns.Bags.SnapshotBags() end
+        if ns.Gear then ns.Gear.Snapshot() end
+        if ns.Professions then ns.Professions.SnapshotSkills() end
+        ns:Print(all and "cleared saved data for all characters." or "cleared saved data for this character.")
+    end,
+    timeout = 0, whileDead = true, hideOnEscape = true,
+}
+
+ns:Command("reset", "clear this character's saved data (asks first)", function()
+    local dialog = StaticPopup_Show("FOREVERCOMPANION_RESET", ns.CharLabel(ns.char, ns:CharKey()))
+    if dialog then dialog.data = false end
+end)
+
+ns:Command("resetall", "clear saved data for every character (asks first)", function()
+    local dialog = StaticPopup_Show("FOREVERCOMPANION_RESET", "ALL characters")
+    if dialog then dialog.data = true end
 end)

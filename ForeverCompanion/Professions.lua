@@ -374,3 +374,35 @@ ns:Command("prof", "show professions, skill-up recipes and trainer reminders", f
         if not ns.char.recipes[p.name] then print("    Open this profession once to record its recipes.") end
     end
 end)
+
+----------------------------------------------------------------------
+-- Cleanup: keep each character's recipe data consistent with its own
+-- professions. Early versions could mix characters' data together.
+----------------------------------------------------------------------
+function PR.Cleanup(char)
+    char = char or ns.char
+    if not char then return end
+    local have = {}
+    for _, p in ipairs(char.professions or {}) do have[p.name] = true end
+    -- Only prune once professions are known (they load a moment after login).
+    if next(have) then
+        for prof in pairs(char.recipes or {}) do
+            if not have[prof] then
+                char.recipes[prof] = nil
+                ns:Debug("removed", prof, "recipes that belonged to another character")
+            end
+        end
+    end
+    -- Materials this character uses: rebuilt from its own learned recipes.
+    local reagents = {}
+    for _, rec in pairs(char.recipes or {}) do
+        for _, r in pairs(rec.list or {}) do
+            if r.learned ~= false then
+                for _, m in ipairs(r.mats or {}) do reagents[m.id] = true end
+            end
+        end
+    end
+    char.reagents = reagents
+end
+
+ns:Listen("PROFESSIONS_CHANGED", function() PR.Cleanup() end)

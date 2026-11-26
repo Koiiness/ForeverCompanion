@@ -39,6 +39,7 @@ function B.SnapshotBank()
     if not ns.char or not bankOpen then return end
     ns.char.bank = scan(C.BankBagIDs())
     ns.char.bankTime = time()
+    ns.char.bankGuid = UnitGUID("player")
     ns:Fire("BAGS_CHANGED")
 end
 
