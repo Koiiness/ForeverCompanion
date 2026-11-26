@@ -392,13 +392,15 @@ function R.NextLevel()
             out.spells[#out.spells + 1] = s.name
         end
     end
-    -- Gear already in your bags that unlocks at the next level.
+    -- Gear already in your bags that unlocks at the next level, then other finds.
+    local seen = {}
     for _, u in ipairs(ns.Gear.BagUpgrades()) do
         local req = select(5, C.GetItemInfo(u.link)) or 0
-        if req == nextL then out.items[#out.items + 1] = u.link end
+        local id = C.ItemID(u.link)
+        if req == nextL and not seen[id] then seen[id] = true out.items[#out.items + 1] = u.link end
     end
     for _, e in ipairs(R.ComingSoon(1)) do
-        if #out.items < 3 then out.items[#out.items + 1] = e.link end
+        if #out.items < 3 and not seen[e.id] then seen[e.id] = true out.items[#out.items + 1] = e.link end
     end
     return out
 end

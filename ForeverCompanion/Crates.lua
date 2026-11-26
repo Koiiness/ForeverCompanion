@@ -156,7 +156,7 @@ function CR.WantedRecipes()
                 local link = r.item and select(2, C.GetItemInfo(r.item))
                 local cmp = link and ns.Gear.Compare(link)
                 local upgrade = cmp and not cmp.unusable and not cmp.partial and cmp.delta > 0.5
-                out[#out + 1] = { prof = prof, name = name, cost = cost, link = link, upgrade = upgrade,
+                out[#out + 1] = { prof = prof, name = name, cost = cost, link = link, upgrade = upgrade, cmp = cmp,
                                   delta = upgrade and cmp.delta or 0 }
             end
         end

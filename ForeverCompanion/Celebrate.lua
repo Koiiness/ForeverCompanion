@@ -37,7 +37,7 @@ local function buildCard()
 
     f.icon = f:CreateTexture(nil, "ARTWORK")
     f.icon:SetSize(46, 46)
-    f.icon:SetPoint("LEFT", 14, 4)
+    f.icon:SetPoint("TOPLEFT", 14, -14)
     f.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 
     f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -55,8 +55,15 @@ local function buildCard()
     f.line2:SetJustifyH("LEFT")
     f.line2:SetSpacing(2)
 
-    f.close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    f.close:SetPoint("TOPRIGHT", 2, 2)
+    f.close = CreateFrame("Button", nil, f)
+    f.close:SetSize(40, 40)
+    f.close:SetPoint("TOPRIGHT", 0, 0)
+    f.close.text = f.close:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    f.close.text:SetPoint("CENTER")
+    f.close.text:SetText("x")
+    local closeHl = f.close:CreateTexture(nil, "HIGHLIGHT")
+    closeHl:SetAllPoints()
+    closeHl:SetColorTexture(1, 1, 1, 0.10)
     f.close:SetScript("OnClick", function() CE.Next() end)
 
     f.button = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
@@ -101,6 +108,8 @@ end
 
 function CE.Next()
     if card then card:Hide() end
+    -- Still fighting: keep the rest queued until combat ends.
+    if InCombatLockdown() or UnitAffectingCombat("player") then return end
     local c = table.remove(queue, 1)
     if c then show(c) end
 end
@@ -221,7 +230,7 @@ ns:On("PLAYER_LEVEL_UP", function(_, newLevel)
         if #zones > 0 then lines[#lines + 1] = "Good zones: " .. table.concat(zones, ", ", 1, math.min(2, #zones)) end
         CE.Push({ icon = "Interface\\Icons\\Spell_Holy_SurgeOfLight", title = "Level " .. (newLevel or UnitLevel("player")) .. "!",
                   line1 = "Nice work. Here's what's new:", line2 = table.concat(lines, "\n"), sound = "level",
-                  action = function() ns:ToggleUI() CE.Next() end, buttonText = "Open plan", duration = 15 })
+                  action = function() ns:OpenPage("Overview") CE.Next() end, buttonText = "Open plan", duration = 15 })
     end)
 end)
 

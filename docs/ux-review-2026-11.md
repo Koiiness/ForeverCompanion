@@ -57,3 +57,39 @@ Average 2.8. This fails the pass bar (an average of at least 3.5, with criteria 
 - **Celebrations:** the quieter later-gear card, and the friendly tone ("Nice work", "Go adventure!").
 - **Layout:** section tabs, drag-to-scroll and whole-row taps.
 - **Safety:** confirmation dialogs.
+
+## Re-grade
+
+| # | Criterion | Before | After the changes |
+|---|---|---|---|
+| 1 | Next action is clear | 2 | 4 |
+| 2 | Explains why and teaches | 3 | 4 |
+| 3 | Tone and player control | 3 | 4 |
+| 4 | Celebration and anticipation | 3 | 4 |
+| 5 | Money coaching | 3 | 4 |
+| 6 | Readability and visual order | 3 | 3 |
+| 7 | Touch and layout soundness | 3 | 4 |
+| 8 | Respect for attention | 2 | 4 |
+| 9 | Page length and depth | 3 | 3 |
+
+Average 3.8: **pass**.
+
+### Fixed after the re-grade
+
+- **Bugs:**
+  - Celebration cards no longer overflow; the icon is now anchored to the top.
+  - A queued card can no longer appear mid-combat.
+  - "Open plan" opens the Overview instead of toggling the window.
+  - Profession trainer reminders are back on Overview.
+  - Chase rows show the right icon.
+  - The Next up item is no longer repeated in the list.
+  - "Upgrade in your bags" rows only show gear you can wear now.
+  - The zone card has a real button.
+  - Next-level items are de-duplicated.
+  - Single-section pages no longer show an empty tab bar.
+- **Now tab:** "Also worth doing" moved to its own Quick wins tab, and Overview has two tiles (level, gold) so the plan starts higher.
+- **One upgrade language:** percentages everywhere, drop chances read "12% drop", shorter tile labels, and truncated rows get a tooltip with the full text.
+- **Closing the gap:** the Money safety net explains how to close the gap, and Bags leads with a sell card when you're below it.
+- **Touch:**
+  - "Got it" and the card close button are 40 px.
+  - Tapping an item row pins its full tooltip, so disenchant odds no longer need hover.

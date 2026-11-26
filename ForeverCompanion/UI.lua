@@ -71,8 +71,8 @@ local ICONS = {
 local PAGE_ORDER = { "Overview", "Gear", "Bags", "Money", "Professions", "Talents", "Quests", "Settings" }
 local PAGE_HINTS = {
     Overview = "Click a to-do item to jump to its page.",
-    Gear = "Hover an item for full details. Shift-click to link it in chat.",
-    Bags = "Hover an item to see the disenchant odds.",
+    Gear = "Tap or hover an item for full details. Shift-click to link it in chat.",
+    Bags = "Tap or hover an item to see its disenchant odds and comparison.",
     Professions = "Open each profession window once so its recipes are recorded.",
     Talents = "Talents come from the game's own tree for your spec.",
     Quests = "Quest colors match the game: yellow gives the best XP for your level.",
@@ -141,7 +141,8 @@ function P.Section(name, label, order)
     if not sec.tabsY then
         sec.tabsY = y
         -- Room for the tab bar: one row, or as many as this page needed last time.
-        y = y + 52 + 46 * ((tabRows[current] or 1) - 1)
+        local rowsLast = tabRows[current] or 1
+        if rowsLast > 0 then y = y + 52 + 46 * (rowsLast - 1) end
     end
     local seen = false
     for _, s in ipairs(sec.list) do if s.name == name then seen = true break end end
@@ -285,6 +286,13 @@ function P.Row(opts)
                 HandleModifiedItemClick(self.link)
             elseif self.onClick then
                 self.onClick()
+            elseif self.link and ItemRefTooltip then
+                -- Tap: pin the full item tooltip (works without hover on touch screens).
+                pcall(function()
+                    if not ItemRefTooltip:IsShown() then ItemRefTooltip:SetOwner(UIParent, "ANCHOR_PRESERVE") end
+                    ItemRefTooltip:SetHyperlink(self.link)
+                    ShowUIPanel(ItemRefTooltip)
+                end)
             end
         end)
         return f
@@ -332,6 +340,20 @@ function P.Row(opts)
         end
     end
     h = math.max(h + 8, icon and 42 or 30)
+    -- Anything still cut off: show the full text on hover or tap.
+    if not opts.link and not opts.tip and w.title.IsTruncated then
+        local cut = w.title:IsTruncated()
+        for _, k in ipairs({ "sub", "sub2", "sub3" }) do
+            if w[k]:IsShown() and w[k]:IsTruncated() then cut = true end
+        end
+        if cut then
+            local full = {}
+            for _, k in ipairs({ "title", "sub", "sub2", "sub3" }) do
+                if opts[k] and opts[k] ~= "" then full[#full + 1] = opts[k] end
+            end
+            w.tip = table.concat(full, "\n")
+        end
+    end
     w.arrow:SetShown(opts.onClick ~= nil)
     place(w, h, indent)
     y = y + 2
@@ -458,7 +480,7 @@ function P.Tip(key, text)
         f.text:SetJustifyV("TOP")
         f.text:SetSpacing(2)
         f.button = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-        f.button:SetSize(90, 30)
+        f.button:SetSize(100, 40)
         f.button:SetPoint("BOTTOMRIGHT", -10, 10)
         f.button:SetText("Got it")
         f.button:SetScript("OnClick", function(self)
@@ -470,7 +492,7 @@ function P.Tip(key, text)
     w.button.key = key
     w.text:SetWidth(CONTENT_W - 44 - 110)
     w.text:SetText(text)
-    local h = math.max(54, w.text:GetStringHeight() + 22)
+    local h = math.max(62, w.text:GetStringHeight() + 22)
     if y > 0 then y = y + 6 end
     place(w, h)
     y = y + 8
@@ -543,7 +565,7 @@ pages.Overview = function()
         for _, u in ipairs(ns.Gear.BagUpgrades()) do
             local req = select(5, ns.C.GetItemInfo(u.link)) or 0
             if req <= level and not skipped["up:" .. u.link] then
-                hero = { icon = itemIcon(u.link), title = "Upgrade in your bags: " .. u.link,
+                hero = { key = "up:" .. u.link, icon = itemIcon(u.link), title = "Upgrade in your bags: " .. u.link,
                          sub = (D.SlotNames[u.cmp.slot] or "") .. ", " .. ns.Gear.UpText(u.cmp) .. " for " .. ns:SpecLabel()
                              .. (ns.Gear.Why(u.link, u.cmp, 3) and ("\n" .. ns.Gear.Why(u.link, u.cmp, 3)) or ""),
                          button = "Equip", onSkip = skip("up:" .. u.link),
@@ -559,7 +581,7 @@ pages.Overview = function()
         local r = ns.Spec.Report()
         if not hero and r.unspent and r.unspent > 0 and not skipped.talent then
             local pick = ns.Spec.NextPick(r)
-            hero = { icon = ICONS.Talents, title = string.format("%d talent point%s ready", r.unspent, r.unspent > 1 and "s" or ""),
+            hero = { key = "talent", icon = ICONS.Talents, title = string.format("%d talent point%s ready", r.unspent, r.unspent > 1 and "s" or ""),
                      sub = pick and ("Suggested: " .. pick.name .. (pick.note and (". " .. pick.note) or "")) or "Open your talents to spend it.",
                      button = "Talents", action = go("Talents"), onSkip = skip("talent") }
         end
@@ -567,7 +589,7 @@ pages.Overview = function()
         local tri = ns.Quests.Triage()
         if not hero and #tri.complete > 0 and not skipped.turnin then
             local levels = xpLeftNow and tri.completeXP >= xpLeftNow
-            hero = { icon = ICONS.Quest, title = string.format("Turn in %d finished quest%s", #tri.complete, #tri.complete > 1 and "s" or ""),
+            hero = { key = "turnin", icon = ICONS.Quest, title = string.format("Turn in %d finished quest%s", #tri.complete, #tri.complete > 1 and "s" or ""),
                      sub = (tri.completeXP > 0 and (tri.completeXP .. " XP") or "Free rewards") .. (levels and ", enough to level up!" or " waiting for you."),
                      button = "Show quests", action = go("Quests"), onSkip = skip("turnin") }
         end
@@ -575,21 +597,18 @@ pages.Overview = function()
         local QDn = ns.QuestDB
         if not hero and QDn and QDn.zones and QDn.zones[1] and not skipped.zone then
             local z = QDn.zones[1]
-            hero = { icon = ICONS.Zone, title = "Good place to quest: " .. z.name,
+            hero = { key = "zone", icon = ICONS.Zone, title = "Good place to quest: " .. z.name,
                      sub = string.format("%d quests at your level you haven't done yet.", z.count),
-                     button = "See the plan", action = function() ns.RenderUI() end, onSkip = skip("zone") }
+                     button = "Quest zones", action = function() sectionState.Quests = "Zones" current = "Quests" ns.RenderUI() end,
+                     onSkip = skip("zone") }
         end
-        if hero then
-            if hero.button == "See the plan" then hero.action = nil end
-            P.Hero(hero)
-        end
+        if hero then P.Hero(hero) end
+        ns.heroKey = hero and hero.key or nil
     end
 
     P.Tiles({
         { level, level < maxLevel and string.format("Level (%.0f%% to next)", s.max > 0 and s.xp / s.max * 100 or 0) or "Level (max)", GOLD },
-        { string.format("%.1f", c.avgIlvl or 0), "Average item level" },
         { M(GetMoney()), "Gold on hand" },
-        { M(totals.AH + totals.DE + totals.VENDOR), "Bag items you can cash in", GREEN },
     })
 
     P.Section("Plan", "Now", 1)
@@ -619,7 +638,7 @@ pages.Overview = function()
         for j = 1, math.min(n, #items) do
             local it = items[j]
             parts[#parts + 1] = (D.SlotNames[it.slot] or "?") .. color(GREEN, " " .. ns.Gear.UpText(it.f.cmp))
-                .. ((it.f.source.rate and it.f.source.kind == "dungeon") and color(GRAY, " " .. ns.Research.FormatRate(it.f.source.rate)) or "")
+                .. ((it.f.source.rate and it.f.source.kind == "dungeon") and color(GRAY, ", " .. ns.Research.FormatRate(it.f.source.rate) .. " drop") or "")
         end
         return table.concat(parts, ", ")
     end
@@ -646,8 +665,8 @@ pages.Overview = function()
     end
 
     local nowCount = 0
-    -- 1. Turn in finished quests: free XP.
-    if #tri.complete > 0 then
+    -- 1. Turn in finished quests: free XP (unless the Next up card already says so).
+    if #tri.complete > 0 and ns.heroKey ~= "turnin" then
         local names = {}
         for i = 1, math.min(3, #tri.complete) do names[#names + 1] = tri.complete[i].title end
         P.Row({ icon = ICONS.Quest, title = string.format("Turn in %d finished quest%s", #tri.complete, #tri.complete > 1 and "s" or ""),
@@ -701,13 +720,13 @@ pages.Overview = function()
         table.sort(soonD, function(a, b) return (a.inLevels or 0) < (b.inLevels or 0) end)
         for i = 1, math.min(2, #soonD) do dungeonRow(soonD[i]) end
     end
+    P.Section("Plan", "Now", 1)
     local missing = {}
     if not ns.Research.HasAtlasLoot() then missing[#missing + 1] = "AtlasLoot Classic Forever (dungeon drops)" end
     if not (QD and QD.Has()) then missing[#missing + 1] = "Questie (quests and questing zones)" end
     if #missing > 0 then P.Note("Install " .. table.concat(missing, " and ") .. " for a fuller plan.", GRAY) end
 
-    P.Section("Plan", "Now", 1)
-    P.SubHeader("Also worth doing")
+    P.Section("Errands", "Quick wins", 1.5)
     local n = 0
     do
         local reserve = ns.Gold.Reserve()
@@ -722,23 +741,27 @@ pages.Overview = function()
         end
     end
     local r = ns.Spec.Report()
-    if r.unspent and r.unspent > 0 then
+    if r.unspent and r.unspent > 0 and ns.heroKey ~= "talent" then
         local pick = ns.Spec.NextPick(r)
-        P.Row({ icon = ICONS.Talents, title = string.format("Spend %d talent point%s", r.unspent, r.unspent > 1 and "s" or ""),
-                sub = pick and ("Suggested next: " .. pick.name) or nil, onClick = go("Talents") })
+        P.Row({ icon = ICONS.Talents, title = string.format("%d talent point%s ready", r.unspent, r.unspent > 1 and "s" or ""),
+                sub = pick and ("Suggested: " .. pick.name) or nil, onClick = go("Talents") })
         n = n + 1
     end
-    local ups = ns.Gear.BagUpgrades()
-    for i = 1, math.min(3, #ups) do
-        local u = ups[i]
-        P.Row({ link = u.link, title = "Equip " .. u.link, sub = (D.SlotNames[u.cmp.slot] or "") .. ": " .. (ns.Gear.Why(u.link, u.cmp) or "better for your spec"),
+    local ups, shownUps = ns.Gear.BagUpgrades(), 0
+    for _, u in ipairs(ups) do
+        local req = select(5, ns.C.GetItemInfo(u.link)) or 0
+        -- Only gear you can wear now, and not the one already on the Next up card.
+        if shownUps < 3 and req <= UnitLevel("player") and ns.heroKey ~= "up:" .. u.link then
+        shownUps = shownUps + 1
+        P.Row({ link = u.link, title = "Upgrade in your bags: " .. u.link, sub = (D.SlotNames[u.cmp.slot] or "") .. ": " .. (ns.Gear.Why(u.link, u.cmp) or "better for your spec"),
                 right = color(GREEN, ns.Gear.UpText(u.cmp)), onClick = go("Gear") })
         n = n + 1
+        end
     end
     local t = ns.Quests.Triage()
     for _, p in ipairs(c.professions or {}) do
         local hint = ns.Professions.TrainerHint(p)
-        if hint and hint:find("^Visit") then
+        if hint and hint:find("^Ready") then
             P.Row({ icon = ICONS.Trainer, title = p.name .. ": visit your trainer", sub = hint, onClick = go("Professions") })
             n = n + 1
         end
@@ -861,7 +884,7 @@ pages.Gear = function()
             if f and f ~= best then
                 local s = f.source
                 local extra = ""
-                if kind == "dungeon" then extra = " " .. (s.instance or "") .. (s.rate and (" " .. R.FormatRate(s.rate)) or "")
+                if kind == "dungeon" then extra = " " .. (s.instance or "") .. (s.rate and (", " .. R.FormatRate(s.rate) .. " drop") or "")
                 elseif kind == "ah" then local p = ns.Prices.Market(f.id) extra = p and (" ~" .. M(p)) or ""
                 elseif kind == "quest" then extra = " " .. (s.quest or "")
                 elseif kind == "craft" then extra = " " .. (s.prof or "") end
@@ -885,7 +908,7 @@ pages.Gear = function()
                     sub = main .. (detail and ("\n" .. detail) or ""), sub2 = alsoLine(finds, best),
                     sub3 = color(GRAY, "Now: ") .. now, right = color(GREEN, ns.Gear.UpText(best.cmp)) })
         else
-            P.Row({ icon = w.link and nil or "Interface\\PaperDoll\\UI-Backpack-EmptySlot", link = w.link,
+            P.Row({ icon = (not w.link) and "Interface\\PaperDoll\\UI-Backpack-EmptySlot" or nil, link = w.link,
                     title = color(GOLD, D.SlotNames[w.slot]) .. "   " .. (w.link or "Empty slot"),
                     sub = color(GRAY, "No upgrade found yet from quests, dungeons, the AH or crafting."),
                     right = color(GRAY, w.link and (w.gap .. " levels below you") or "empty") })
@@ -948,6 +971,23 @@ pages.Bags = function()
     local list, totals = ns.Disposition.EvaluateBags()
     local counts = { AH = 0, DE = 0, VENDOR = 0, KEEP = 0 }
     for _, a in ipairs(list) do counts[a.action] = counts[a.action] + 1 end
+    -- Below your safety net: lead with how selling closes the gap.
+    do
+        local reserve = ns.Gold.Reserve()
+        local money = GetMoney()
+        if money < reserve and (totals.VENDOR > 0 or totals.AH > 0) then
+            local gap = reserve - money
+            local atVendor = ns.Bags.MerchantOpen()
+            local covers = totals.VENDOR >= gap
+            P.Hero({ icon = ICONS.Coin,
+                     title = covers and ("Selling your Vendor items (~" .. M(totals.VENDOR) .. ") covers your safety net")
+                         or ("Your safety net is " .. M(gap) .. " short"),
+                     sub = (covers and "" or ("Vendor items ~" .. M(totals.VENDOR) .. ", auction items ~" .. M(totals.AH) .. ". "))
+                         .. (atVendor and "You're at a vendor now." or "Talk to any vendor, then sell from here."),
+                     button = "Sell Vendor items",
+                     action = atVendor and function() StaticPopup_Show("FOREVERCOMPANION_SELL") end or nil })
+        end
+    end
     P.Tiles({
         { M(totals.AH), counts.AH .. " to auction", GOLD },
         { M(totals.DE), counts.DE .. " to disenchant", PURPLE },
@@ -1074,7 +1114,7 @@ pages.Professions = function()
                 local why
                 if g.upgrade then
                     local w = ns.Gear.Why(select(2, ns.C.GetItemInfo(g.r.item)) or "", g.plan.result.cmp)
-                    why = color(GREEN, string.format("Upgrade +%.1f", g.delta)) .. (w and (": " .. w) or "")
+                    why = color(GREEN, "Upgrade " .. ns.Gear.UpText(g.plan.result and g.plan.result.cmp)) .. (w and (": " .. w) or "")
                 else
                     why = color(GREEN, "Profit ~" .. M(g.profit) .. " each") .. color(GRAY, " (sells for more than its materials)")
                 end
@@ -1106,7 +1146,7 @@ pages.Professions = function()
         for i = 1, math.min(5, #wanted) do
             local w = wanted[i]
             P.Row({ link = w.link, icon = (not w.link) and ICONS.Trainer or nil, title = w.name .. color(GRAY, "  ·  " .. w.prof),
-                    sub = w.upgrade and color(GREEN, string.format("Makes an upgrade for you (+%.1f)", w.delta)) or color(GRAY, "Doesn't make an upgrade for you right now"),
+                    sub = w.upgrade and color(GREEN, "Makes an upgrade for you (" .. ns.Gear.UpText(w.cmp) .. ")") or color(GRAY, "Doesn't make an upgrade for you right now"),
                     right = w.cost and color(GOLD, w.cost .. " Favor") or nil })
         end
     end
@@ -1130,10 +1170,10 @@ pages.Money = function()
     local plan = ns.MoneyPlan.Plan()
     local best = plan.crafts[1]
     P.Tiles({
-        { M(plan.totalGold), "Gold on all characters", GOLD },
+        { M(plan.totalGold), "Gold, all characters", GOLD },
         { M(plan.totalCash), "Ready to cash in", GREEN },
-        { best and M(best.profit) or "--", "Best craft profit (each)" },
-        { plan.enchanter and plan.enchanter.rank or "none", "Your best Enchanting skill", PURPLE },
+        { best and M(best.profit) or "--", "Best craft profit" },
+        { plan.enchanter and plan.enchanter.rank or "none", "Enchanting", PURPLE },
     })
     if not next(ns.db.prices) and not TSM_API and not (Auctionator and Auctionator.API) then
         P.Note("No auction prices yet. Open the auction house once and a price scan runs by itself; this page fills in after that.", GOLD)
@@ -1150,6 +1190,14 @@ pages.Money = function()
         P.Tip("safety", "Your safety net keeps gold for what every character needs: new spells from your class trainer, and repairs. Gold above it is yours to spend on fun.")
         P.Bar("Safety net", math.min(money, reserve), math.max(reserve, 1), money >= reserve and "4cff4c" or "ffd100",
             M(math.min(money, reserve)) .. " of " .. M(reserve))
+        if money < reserve then
+            local _, bt = ns.Disposition.EvaluateBags()
+            local cash = bt.AH + bt.DE + bt.VENDOR
+            local gap = reserve - money
+            P.Note(cash >= gap and ("Selling your bag items (~" .. M(cash) .. ") would cover the " .. M(gap) .. " gap. The Bags page shows what to sell where.")
+                or (cash > 0 and ("Selling your bag items (~" .. M(cash) .. ") gets you closer; quest rewards and vendoring loot cover the rest.")
+                or "Quest rewards and vendoring loot will close the gap as you play."), GRAY)
+        end
         P.Row({ icon = ICONS.Coin, title = "Spendable", sub = "What you can spend on crafting and the AH without touching your safety net",
                 right = spendable > 0 and color(GREEN, M(spendable)) or color(GRAY, "0, all set aside") })
         P.Row({ icon = ICONS.Repair, title = "Safety net", sub = "Kept aside for the things you'll need", right = M(reserve) })
@@ -1225,7 +1273,7 @@ pages.Money = function()
             plan.hiddenGrind, plan.hiddenGrind > 1 and "s" or ""), GRAY)
     end
     if #plan.crafts == 0 then
-        P.Note("No profitable recipes found yet. Open each character's profession windows once so recipes are recorded, and scan the AH.", GRAY)
+        P.Note("No profitable recipes found yet. Open each character's profession windows once so recipes are recorded, and open the auction house once for prices.", GRAY)
     end
     for i = 1, math.min(6, #plan.crafts) do
         local cr = plan.crafts[i]
@@ -1233,7 +1281,7 @@ pages.Money = function()
         P.Row({ link = link, title = color(GOLD, cr.recipe) .. color(GRAY, "  ·  " .. cr.who .. ", " .. cr.prof),
                 sub = cr.mp and ns.Mats.Line(cr.mp) or nil,
                 sub2 = (cr.mp and (ns.Mats.Summary(cr.mp) .. color(GRAY, "   ·   ")) or "")
-                    .. string.format("sells ~%s after the AH cut, materials worth ~%s", M(cr.value), M(cr.cost)),
+                    .. string.format("sells ~%s after the AH fee, materials worth ~%s", M(cr.value), M(cr.cost)),
                 right = color(GREEN, "+" .. M(cr.profit)) })
     end
 
@@ -1507,7 +1555,8 @@ end
 
 -- The tab bar for the current page's sections.
 local function drawSectionTabs()
-    if not sec.tabsY or #sec.list < 2 then return end
+    if not sec.tabsY then return end
+    if #sec.list < 2 then return 0 end   -- one section: no tab bar needed
     local list = {}
     for _, s in ipairs(sec.list) do list[#list + 1] = s end
     table.sort(list, function(a, b) return a.order < b.order end)
@@ -1729,6 +1778,14 @@ StaticPopupDialogs["FOREVERCOMPANION_SELL"] = {
     OnAccept = function() ns.Bags.SellAdvised() end,
     timeout = 0, whileDead = true, hideOnEscape = true,
 }
+
+-- Open the window on a page (used by the level-up card).
+function ns:OpenPage(page)
+    if not frame then build() end
+    current = page or current
+    frame:Show()
+    ns.RenderUI()
+end
 
 function ns:ToggleUI()
     if not frame then build() end
