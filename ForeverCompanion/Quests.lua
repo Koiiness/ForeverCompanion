@@ -111,6 +111,8 @@ end
 -- Level-up checklist
 ----------------------------------------------------------------------
 ns:On("PLAYER_LEVEL_UP", function(_, newLevel)
+    -- The level-up card covers this; chat only when cards are turned off.
+    if ns.db.settings.celebrate ~= false then return end
     C_Timer.After(3, function()
         local tips = {}
         if newLevel and newLevel % 2 == 0 then tips[#tips + 1] = "new spells may be at your class trainer" end

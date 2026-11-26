@@ -14,6 +14,7 @@ Built for the Forever client 1.60.1 (Interface 16001).
 - **Talents.** The best next talent from a Forever leveling build (Discipline Priest so far; more specs can be added in `Data.lua`).
 - **Quests.** XP per hour, time to level, a quest log sorted by difficulty, and zones for your level.
 - **Tracking.** Gear, bags and bank across all your characters (`/fc find <item>`), with prices from your own auction house scans.
+- **Celebrations.** A card with a sound when you get an upgrade (tap Equip to wear it), when you pick up gear for a few levels from now, and when you level up. `/fc celebrate` turns them off; `/fc testcard` shows a sample.
 
 ## Install
 

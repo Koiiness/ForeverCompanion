@@ -23,5 +23,6 @@ Money.lua
 Quests.lua
 QuestDB.lua
 Tooltip.lua
+Celebrate.lua
 UI.lua
 Minimap.lua
