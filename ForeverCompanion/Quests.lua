@@ -68,7 +68,7 @@ local ADVICE = {
     orange = "doable with care or a friend",
     yellow = "best XP for your level",
     green = "quick and easy",
-    gray = "little XP: abandon unless it's on your way",
+    gray = "little XP now; fine to drop",
 }
 
 function Q.Triage()
@@ -79,7 +79,7 @@ function Q.Triage()
             q.xp = C.QuestRewardXP(q.questID)
             q.advice = ADVICE[q.diff]
             if (q.group or 0) > 1 and ns.db.settings.playStyle == "solo" then
-                q.advice = "group quest (" .. q.group .. " players): skip it or ask for help"
+                q.advice = "group quest (" .. q.group .. " players): ask your guild, or save it for later"
                 if q.diff == "yellow" or q.diff == "green" then q.diff = "orange" end
             end
             if q.complete then

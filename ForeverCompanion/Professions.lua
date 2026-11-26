@@ -42,7 +42,7 @@ local function store(profName, recipes)
     end
     if not announced[profName] then
         announced[profName] = true
-        ns:Print(string.format("recorded %d known %s recipes (%d more you can still learn).", known, profName, total - known))
+        ns:Debug(string.format("recorded %d known %s recipes (%d more you can still learn).", known, profName, total - known))
     end
     PR.SnapshotSkills()
 end
@@ -198,7 +198,7 @@ function PR.TrainerHint(p)
     for _, tier in ipairs(D.ProfessionTiers) do
         if p.max == tier.max and p.rank >= p.max - 10 then
             if level >= tier.level then
-                return "Visit a trainer to learn " .. tier.next .. "."
+                return "Ready for " .. tier.next .. ": a trainer raises your cap."
             end
             return tier.next .. " unlocks at level " .. tier.level .. "."
         end
@@ -450,7 +450,7 @@ local function recordTrainer()
     end
     for f, v in pairs(saved) do SetTrainerServiceTypeFilter(f, v and 1 or 0) end
     if count > 0 then
-        ns:Print(string.format("recorded %d %s recipes from %s.", count, prof or "trainer", npc or "this trainer"))
+        ns:Debug(string.format("recorded %d %s recipes from %s.", count, prof or "trainer", npc or "this trainer"))
         if ns.Research then ns.Research.Invalidate() end
     end
 end

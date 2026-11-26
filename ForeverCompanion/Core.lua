@@ -212,7 +212,10 @@ ns:On("PLAYER_LOGIN", function()
     end
     ns.char = char
     ns:Fire("READY")
-    ns:Print("loaded. Type |cffffff00/fc|r to open, |cffffff00/fc help|r for commands.")
+    if not ns.db.welcomed then
+        ns.db.welcomed = true
+        ns:Print("welcome! Type |cffffff00/fc|r or click the minimap button to open it, |cffffff00/fc help|r for commands.")
+    end
 end)
 
 ----------------------------------------------------------------------
@@ -290,9 +293,9 @@ function ns:AddNote(text)
     return true
 end
 
-ns:Command("note", "<text> leave a note for Claude (saved when you /reload or log out)", function(arg)
+ns:Command("note", "<text> leave a note (saved when you /reload or log out)", function(arg)
     if ns:AddNote(arg) then
-        ns:Print("note saved. Type /reload (or log out) so the game writes it to disk, then tell Claude to check your notes.")
+        ns:Print("note saved. It's written to disk when you /reload or log out.")
     else
         ns:Print("usage: /fc note <what you want to say>")
     end

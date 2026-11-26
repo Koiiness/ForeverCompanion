@@ -172,7 +172,7 @@ function MA.Text(s)
 end
 
 local VERDICT = {
-    [0] = { "Mats on hand", "4cff4c" },
+    [0] = { "Materials in your bags", "4cff4c" },
     [1] = { "Cheap to make", "4cff4c" },
     [2] = { "Gather the mats", "80d4ff" },
     [3] = { "Farm while leveling", "80d4ff" },

@@ -27,7 +27,7 @@ local function fillTooltip(tt)
     end
     tt:AddLine(" ")
     tt:AddLine("|cffffd100Left-click|r open or close", 0.8, 0.8, 0.8)
-    tt:AddLine("|cffffd100Right-click|r leave a note for Claude", 0.8, 0.8, 0.8)
+    tt:AddLine("|cffffd100Right-click|r leave a note", 0.8, 0.8, 0.8)
     tt:AddLine("|cffffd100Drag|r move around the minimap", 0.8, 0.8, 0.8)
 end
 

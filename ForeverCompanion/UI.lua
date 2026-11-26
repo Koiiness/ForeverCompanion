@@ -131,6 +131,7 @@ local P = {}
 -- first section starts, after the page has listed all its sections.
 ----------------------------------------------------------------------
 local sectionState = {}   -- page name -> selected section name
+local tabRows = {}        -- page name -> how many rows its tab bar used
 local sec = {}
 local function resetSections() sec = { list = {}, skipping = false, found = false, tabsY = nil } end
 resetSections()
@@ -139,7 +140,8 @@ resetSections()
 function P.Section(name, label, order)
     if not sec.tabsY then
         sec.tabsY = y
-        y = y + 40
+        -- Room for the tab bar: one row, or as many as this page needed last time.
+        y = y + 52 + 46 * ((tabRows[current] or 1) - 1)
     end
     local seen = false
     for _, s in ipairs(sec.list) do if s.name == name then seen = true break end end
@@ -209,6 +211,7 @@ function P.Tiles(tiles)
             f.value:SetJustifyH("LEFT")
             f.value:SetWordWrap(false)
             f.label = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            f.label:SetWordWrap(false)
             f.label:SetPoint("BOTTOMLEFT", 10, 9)
             f.label:SetPoint("RIGHT", -8, 0)
             f.label:SetJustifyH("LEFT")
@@ -247,7 +250,7 @@ function P.Row(opts)
         f.sub = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         f.sub:SetJustifyH("LEFT")
         f.sub:SetWordWrap(true)
-        if f.sub.SetMaxLines then f.sub:SetMaxLines(3) end
+        if f.sub.SetMaxLines then f.sub:SetMaxLines(4) end
         f.sub2 = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         f.sub2:SetJustifyH("LEFT")
         f.sub2:SetWordWrap(true)
@@ -367,10 +370,10 @@ function P.Choices(label, choices)
             return f
         end)
         b.text:SetText(ch.label)
-        local w = math.max(64, b.text:GetStringWidth() + 28)
-        if x + w > CONTENT_W and x > 0 then x, rowY = 0, rowY + 36 end
+        local w = math.max(72, b.text:GetStringWidth() + 32)
+        if x + w > CONTENT_W and x > 0 then x, rowY = 0, rowY + 48 end
         b:SetPoint("TOPLEFT", content, "TOPLEFT", x, -rowY)
-        b:SetSize(w, 30)
+        b:SetSize(w, 40)
         if ch.active then
             b:SetBackdropColor(ACCENT[1], ACCENT[2], ACCENT[3], 0.35)
             b:SetBackdropBorderColor(ACCENT[1], ACCENT[2], ACCENT[3], 0.9)
@@ -381,9 +384,58 @@ function P.Choices(label, choices)
         b.fn = ch.onClick
         x = x + w + 8
     end
-    y = rowY + 40
+    y = rowY + 50
 end
 
+
+-- The "Next up" card: one highlighted suggestion with one main button and
+-- "Not now". opts: { icon, title, sub, button, action, onSkip }
+function P.Hero(opts)
+    if sec.skipping then return end
+    local w = acquire("hero", function()
+        local f = newBackdrop(content, 0.12, 0.10, 0.04, 0.97)
+        f:SetBackdropBorderColor(1, 0.82, 0, 0.75)
+        f.icon = f:CreateTexture(nil, "ARTWORK")
+        f.icon:SetSize(40, 40)
+        f.icon:SetPoint("TOPLEFT", 12, -12)
+        f.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        f.kicker = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        f.kicker:SetPoint("TOPLEFT", 64, -10)
+        f.kicker:SetText("NEXT UP")
+        f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        f.title:SetPoint("TOPLEFT", f.kicker, "BOTTOMLEFT", 0, -3)
+        f.title:SetJustifyH("LEFT")
+        f.sub = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        f.sub:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -4)
+        f.sub:SetJustifyH("LEFT")
+        f.sub:SetSpacing(2)
+        f.main = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+        f.main:SetSize(130, 40)
+        f.main:SetPoint("BOTTOMRIGHT", -12, 12)
+        f.main:SetScript("OnClick", function(self) if self.fn then self.fn() end end)
+        f.skip = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+        f.skip:SetSize(100, 40)
+        f.skip:SetPoint("RIGHT", f.main, "LEFT", -8, 0)
+        f.skip:SetText("Not now")
+        f.skip:SetScript("OnClick", function(self) if self.fn then self.fn() end end)
+        return f
+    end)
+    w.icon:SetTexture(opts.icon or "Interface\\Icons\\INV_Misc_Book_09")
+    local textW = CONTENT_W - 64 - 16
+    w.title:SetWidth(textW)
+    w.title:SetText(opts.title)
+    w.sub:SetWidth(textW)
+    w.sub:SetText(opts.sub or "")
+    w.main:SetShown(opts.action ~= nil)
+    w.main:SetText(opts.button or "Show me")
+    w.main.fn = opts.action
+    w.skip:SetShown(opts.onSkip ~= nil)
+    w.skip.fn = opts.onSkip
+    local textH = 10 + 12 + 3 + w.title:GetStringHeight() + 4 + w.sub:GetStringHeight()
+    local h = textH + ((opts.action or opts.onSkip) and 62 or 14)
+    place(w, math.max(h, 70))
+    y = y + 10
+end
 
 -- A teaching tip shown just in time, once. "Got it" hides it for good;
 -- the "I know WoW" setting hides all tips.
@@ -480,6 +532,59 @@ pages.Overview = function()
     local maxLevel = GetMaxPlayerLevel and GetMaxPlayerLevel() or 60
     local level = UnitLevel("player")
     local _, totals = ns.Disposition.EvaluateBags()
+    -- Next up: the single best thing to do right now (Not now skips it for this session).
+    do
+        local skipped = ns.skippedNext or {}
+        ns.skippedNext = skipped
+        local function skip(key) return function() skipped[key] = true ns.RenderUI() end end
+        local hero
+        local xpLeftNow = level < maxLevel and (s.max - s.xp) or nil
+        -- 1. An upgrade in your bags you can wear now.
+        for _, u in ipairs(ns.Gear.BagUpgrades()) do
+            local req = select(5, ns.C.GetItemInfo(u.link)) or 0
+            if req <= level and not skipped["up:" .. u.link] then
+                hero = { icon = itemIcon(u.link), title = "Upgrade in your bags: " .. u.link,
+                         sub = (D.SlotNames[u.cmp.slot] or "") .. ", " .. ns.Gear.UpText(u.cmp) .. " for " .. ns:SpecLabel()
+                             .. (ns.Gear.Why(u.link, u.cmp, 3) and ("\n" .. ns.Gear.Why(u.link, u.cmp, 3)) or ""),
+                         button = "Equip", onSkip = skip("up:" .. u.link),
+                         action = function()
+                             if InCombatLockdown() then ns:Print("you can equip it after combat.") return end
+                             local equip = (C_Item and C_Item.EquipItemByName) or EquipItemByName
+                             if equip then equip(u.link, u.cmp.slot) end
+                         end }
+                break
+            end
+        end
+        -- 2. A talent point.
+        local r = ns.Spec.Report()
+        if not hero and r.unspent and r.unspent > 0 and not skipped.talent then
+            local pick = ns.Spec.NextPick(r)
+            hero = { icon = ICONS.Talents, title = string.format("%d talent point%s ready", r.unspent, r.unspent > 1 and "s" or ""),
+                     sub = pick and ("Suggested: " .. pick.name .. (pick.note and (". " .. pick.note) or "")) or "Open your talents to spend it.",
+                     button = "Talents", action = go("Talents"), onSkip = skip("talent") }
+        end
+        -- 3. Finished quests that would level you up.
+        local tri = ns.Quests.Triage()
+        if not hero and #tri.complete > 0 and not skipped.turnin then
+            local levels = xpLeftNow and tri.completeXP >= xpLeftNow
+            hero = { icon = ICONS.Quest, title = string.format("Turn in %d finished quest%s", #tri.complete, #tri.complete > 1 and "s" or ""),
+                     sub = (tri.completeXP > 0 and (tri.completeXP .. " XP") or "Free rewards") .. (levels and ", enough to level up!" or " waiting for you."),
+                     button = "Show quests", action = go("Quests"), onSkip = skip("turnin") }
+        end
+        -- 4. Where to quest.
+        local QDn = ns.QuestDB
+        if not hero and QDn and QDn.zones and QDn.zones[1] and not skipped.zone then
+            local z = QDn.zones[1]
+            hero = { icon = ICONS.Zone, title = "Good place to quest: " .. z.name,
+                     sub = string.format("%d quests at your level you haven't done yet.", z.count),
+                     button = "See the plan", action = function() ns.RenderUI() end, onSkip = skip("zone") }
+        end
+        if hero then
+            if hero.button == "See the plan" then hero.action = nil end
+            P.Hero(hero)
+        end
+    end
+
     P.Tiles({
         { level, level < maxLevel and string.format("Level (%.0f%% to next)", s.max > 0 and s.xp / s.max * 100 or 0) or "Level (max)", GOLD },
         { string.format("%.1f", c.avgIlvl or 0), "Average item level" },
@@ -487,7 +592,7 @@ pages.Overview = function()
         { M(totals.AH + totals.DE + totals.VENDOR), "Bag items you can cash in", GREEN },
     })
 
-    P.Section("Plan", "Your plan", 1)
+    P.Section("Plan", "Now", 1)
     -- Your plan: what to do now at your level, then what's coming up.
     local plan = ns.Research.Plan()
     local tri = ns.Quests.Triage()
@@ -513,7 +618,7 @@ pages.Overview = function()
         local parts = {}
         for j = 1, math.min(n, #items) do
             local it = items[j]
-            parts[#parts + 1] = (D.SlotNames[it.slot] or "?") .. color(GREEN, string.format(" +%.1f", it.f.cmp.delta))
+            parts[#parts + 1] = (D.SlotNames[it.slot] or "?") .. color(GREEN, " " .. ns.Gear.UpText(it.f.cmp))
                 .. ((it.f.source.rate and it.f.source.kind == "dungeon") and color(GRAY, " " .. ns.Research.FormatRate(it.f.source.rate)) or "")
         end
         return table.concat(parts, ", ")
@@ -524,7 +629,7 @@ pages.Overview = function()
         local parts = {}
         for j = 1, math.min(2, #q.items) do
             local it = q.items[j]
-            parts[#parts + 1] = (it.f.link or "?") .. color(GREEN, string.format(" +%.1f", it.f.cmp.delta)) .. (it.choice and color(GRAY, " (choose it)") or "")
+            parts[#parts + 1] = (it.f.link or "?") .. color(GREEN, " " .. ns.Gear.UpText(it.f.cmp)) .. (it.choice and color(GRAY, " (choose it)") or "")
         end
         P.Row({ icon = ICONS.Quest, title = verb .. color(GOLD, q.name) .. color(GRAY, where)
                     .. (q.needs and color("ff8040", "  (do " .. q.needs .. " first)") or ""),
@@ -540,7 +645,6 @@ pages.Overview = function()
                 onClick = go("Gear") })
     end
 
-    P.SubHeader("Now")
     local nowCount = 0
     -- 1. Turn in finished quests: free XP.
     if #tri.complete > 0 then
@@ -549,7 +653,7 @@ pages.Overview = function()
         P.Row({ icon = ICONS.Quest, title = string.format("Turn in %d finished quest%s", #tri.complete, #tri.complete > 1 and "s" or ""),
                 sub = table.concat(names, ", ") .. (#tri.complete > 3 and ", ..." or ""),
                 right = tri.completeXP > 0 and color(GREEN, string.format("%d XP%s", tri.completeXP,
-                    xpLeft and tri.completeXP >= xpLeft and "  (levels you!)" or "")) or nil, onClick = go("Quests") })
+                    xpLeft and tri.completeXP >= xpLeft and "  (enough to level up!)" or "")) or nil, onClick = go("Quests") })
         nowCount = nowCount + 1
     end
     -- 2. Where to quest for XP right now.
@@ -592,7 +696,7 @@ pages.Overview = function()
     if nowCount == 0 then P.Note("Nothing specific yet. Keep questing; this fills in as data loads.", GRAY) end
 
     if #soonQ > 0 or #soonD > 0 then
-        P.SubHeader("Coming up")
+        P.Section("Coming", "Coming up", 2)
         for i = 1, math.min(2, #soonQ) do questRow(soonQ[i]) end
         table.sort(soonD, function(a, b) return (a.inLevels or 0) < (b.inLevels or 0) end)
         for i = 1, math.min(2, #soonD) do dungeonRow(soonD[i]) end
@@ -602,14 +706,18 @@ pages.Overview = function()
     if not (QD and QD.Has()) then missing[#missing + 1] = "Questie (quests and questing zones)" end
     if #missing > 0 then P.Note("Install " .. table.concat(missing, " and ") .. " for a fuller plan.", GRAY) end
 
-    P.Section("To do", "To do", 2)
-    P.Header("Next steps")
+    P.Section("Plan", "Now", 1)
+    P.SubHeader("Also worth doing")
     local n = 0
     do
         local reserve = ns.Gold.Reserve()
         if GetMoney() < reserve then
-            P.Row({ icon = ICONS.Coin, title = color(RED, "Low on gold"), sub = "Keep " .. M(reserve) .. " for training and repairs; you have " .. M(GetMoney()) .. ". Sell or vendor before buying anything.",
-                    onClick = go("Money") })
+            local gap = reserve - GetMoney()
+            local cash = totals.AH + totals.DE + totals.VENDOR
+            local how = cash >= gap and ("Selling your bag items (~" .. M(cash) .. ") would cover it.")
+                or (cash > 0 and ("Selling your bag items (~" .. M(cash) .. ") gets you closer; quests pay gold too.") or "Quest rewards and vendoring loot will get you there.")
+            P.Row({ icon = ICONS.Coin, title = color(GOLD, "Safety net: " .. M(GetMoney()) .. " of " .. M(reserve)),
+                    sub = "Covers repairs and your next class training. " .. how, onClick = go(cash > 0 and "Bags" or "Money") })
             n = n + 1
         end
     end
@@ -624,7 +732,7 @@ pages.Overview = function()
     for i = 1, math.min(3, #ups) do
         local u = ups[i]
         P.Row({ link = u.link, title = "Equip " .. u.link, sub = (D.SlotNames[u.cmp.slot] or "") .. ": " .. (ns.Gear.Why(u.link, u.cmp) or "better for your spec"),
-                right = color(GREEN, string.format("+%.1f", u.cmp.delta)), onClick = go("Gear") })
+                right = color(GREEN, ns.Gear.UpText(u.cmp)), onClick = go("Gear") })
         n = n + 1
     end
     local t = ns.Quests.Triage()
@@ -640,8 +748,8 @@ pages.Overview = function()
         if g.dura and (not worst or g.dura < worst.dura) then worst = { slot = slot, dura = g.dura } end
     end
     if worst and worst.dura < 0.25 then
-        P.Row({ icon = ICONS.Repair, title = "Repair your gear",
-                sub = string.format("%s is at %d%% durability", D.SlotNames[worst.slot] or "An item", worst.dura * 100), onClick = go("Gear") })
+        P.Row({ icon = ICONS.Repair, title = "Gear needs a repair soon",
+                sub = string.format("%s is at %d%% durability. Any vendor with an anvil icon can repair it.", D.SlotNames[worst.slot] or "An item", worst.dura * 100), onClick = go("Gear") })
         n = n + 1
     end
     local sealed, fillable = ns.Crates.Todo()
@@ -660,7 +768,7 @@ pages.Overview = function()
         if ok and mp and (mp.crafts[1] or #mp.mail > 0) then
             local bits = {}
             if mp.crafts[1] then bits[#bits + 1] = "craft " .. mp.crafts[1].recipe .. " (+" .. M(mp.crafts[1].profit) .. " each)" end
-            if #mp.mail > 0 then bits[#bits + 1] = "mail greens to your enchanter" end
+            if #mp.mail > 0 then bits[#bits + 1] = "mail green-quality gear to your enchanter to disenchant" end
             P.Row({ icon = ICONS.Money, title = "Make gold", sub = table.concat(bits, ", "), onClick = go("Money") })
             n = n + 1
         end
@@ -670,14 +778,13 @@ pages.Overview = function()
         if totals.AH > 0 then parts[#parts + 1] = "auction ~" .. M(totals.AH) end
         if totals.DE > 0 then parts[#parts + 1] = "disenchant ~" .. M(totals.DE) end
         if totals.VENDOR > 0 then parts[#parts + 1] = "vendor " .. M(totals.VENDOR) end
-        P.Row({ icon = ICONS.Bags, title = "Clear out your bags", sub = table.concat(parts, ", "), onClick = go("Bags") })
+        P.Row({ icon = ICONS.Bags, title = "Bag items worth ~" .. M(totals.AH + totals.DE + totals.VENDOR), sub = table.concat(parts, ", "), onClick = go("Bags") })
         n = n + 1
     end
     if n == 0 then P.Note("Nothing pressing. Go adventure!", GRAY) end
 
     if level < maxLevel then
         P.Section("Leveling", "Leveling", 3)
-        P.Header("Leveling")
         P.Bar("Experience", s.xp, s.max, "b97cff")
         P.Row({ icon = ICONS.Clock, title = "Time to next level",
                 sub = s.perHour and (math.floor(s.perHour) .. " XP per hour this session") or "Needs a few minutes of play to measure",
@@ -717,7 +824,7 @@ pages.Gear = function()
     end
     P.Choices("Score gear for:", choices)
     if guess then
-        P.Note("Your spec couldn't be detected: no talent points could be read. Click your spec above so gear is scored correctly.", "ff8040")
+        P.Note(UnitLevel("player") < 10 and "Talents start at level 10. Until then, pick the role you play above so gear advice fits." or "Your spec couldn't be detected from your talents. Pick the one you play above so gear advice fits.", GRAY)
     elseif not manual then
         P.Note("Detected " .. how .. ".", GRAY)
     end
@@ -726,46 +833,64 @@ pages.Gear = function()
     P.Section("Upgrades", "Upgrades", 1)
     P.Header("Upgrades in your bags", #ups > 0 and color(GREEN, #ups .. " found") or nil)
     P.Tip("upgrades", "Green numbers show how much better an item is for your spec. Stats matter more than item level: the Spec & stats tab shows which stats help you most.")
-    if #ups == 0 then P.Note("None right now. Gear you loot is checked automatically.", GRAY) end
+    if #ups == 0 then P.Note("None right now. Gear you pick up is checked automatically, and you'll get a card when it's an upgrade.", GRAY) end
     for _, u in ipairs(ups) do
+        local req = select(5, ns.C.GetItemInfo(u.link)) or 0
+        local canNow = req <= UnitLevel("player")
         P.Row({ link = u.link, sub = "Replaces " .. (u.cmp.current or "an empty slot") .. " in " .. (D.SlotNames[u.cmp.slot] or "?")
                 .. (u.cmp.note and (", " .. color(GOLD, u.cmp.note)) or ""),
                 sub2 = ns.Gear.Why(u.link, u.cmp, 5),
-                right = color(GREEN, string.format("+%.1f%s", u.cmp.delta, u.cmp.pct and string.format("  (%+.0f%%)", u.cmp.pct) or "")) })
+                right = color(GREEN, ns.Gear.UpText(u.cmp)) .. (canNow and color(GRAY, "  tap to equip") or ""),
+                onClick = canNow and function()
+                    if InCombatLockdown() then ns:Print("you can equip it after combat.") return end
+                    local equip = (C_Item and C_Item.EquipItemByName) or EquipItemByName
+                    if equip then equip(u.link, u.cmp.slot) end
+                end or nil })
     end
 
+    -- Chase: one row per weak slot with its best find, other sources in brief.
+    P.Section("Chase", "What to chase", 1.2)
     local weak = ns.Gear.WeakSlots()
-    P.Header("What to chase next", "your weakest slots first")
-    if #weak == 0 then P.Note("Every slot is reasonable for your level.", GRAY) end
+    if #weak == 0 then P.Note("Every slot is in good shape for your level.", GRAY) end
     local R = ns.Research
-    for i = 1, math.min(5, #weak) do
-        local w = weak[i]
-        if w.link then
-            P.Row({ link = w.link, title = color(GOLD, D.SlotNames[w.slot]) .. "   " .. w.link,
-                    sub = "Item level " .. w.ilvl, right = color(RED, w.gap .. " levels behind") })
-        else
-            P.Row({ icon = "Interface\\PaperDoll\\UI-Backpack-EmptySlot", title = color(GOLD, D.SlotNames[w.slot]),
-                    sub = "Nothing equipped", right = color(RED, "empty") })
-        end
-        -- Best option from each source, so crafting doesn't hide AH and dungeon gear.
-        local finds = R.ForSlot(w.slot, 1)
-        local any = false
+    local KIND_SHORT = { quest = "quest", dungeon = "dungeon", ah = "AH", craft = "craft" }
+    local function alsoLine(finds, best)
+        local parts = {}
         for _, kind in ipairs({ "quest", "dungeon", "ah", "craft" }) do
             local f = finds[kind][1]
-            if f then
-                any = true
-                local main, detail = R.Describe(f)
-                P.Row({ link = f.link, title = f.link, sub = main, sub2 = detail, sub3 = ns.Gear.Why(f.link, f.cmp),
-                        right = color(GREEN, string.format("+%.1f", f.cmp.delta)), indent = 24 })
+            if f and f ~= best then
+                local s = f.source
+                local extra = ""
+                if kind == "dungeon" then extra = " " .. (s.instance or "") .. (s.rate and (" " .. R.FormatRate(s.rate)) or "")
+                elseif kind == "ah" then local p = ns.Prices.Market(f.id) extra = p and (" ~" .. M(p)) or ""
+                elseif kind == "quest" then extra = " " .. (s.quest or "")
+                elseif kind == "craft" then extra = " " .. (s.prof or "") end
+                parts[#parts + 1] = KIND_SHORT[kind] .. extra .. " (" .. ns.Gear.UpText(f.cmp) .. ")"
             end
         end
-        if not any then
-            P.Note("      No known upgrade yet from quests, dungeons, the auction house or crafting.", GRAY)
+        return #parts > 0 and color(GRAY, "Also: " .. table.concat(parts, "  ·  ")) or nil
+    end
+    for i = 1, math.min(6, #weak) do
+        local w = weak[i]
+        local finds = R.ForSlot(w.slot, 1)
+        local best
+        for _, kind in ipairs({ "quest", "dungeon", "ah", "craft" }) do
+            local f = finds[kind][1]
+            if f and (not best or f.cmp.delta > best.cmp.delta) then best = f end
+        end
+        local now = w.link and (w.link .. color(GRAY, "  item level " .. w.ilvl)) or color(GRAY, "nothing equipped")
+        if best then
+            local main, detail = R.Describe(best)
+            P.Row({ link = best.link, title = color(GOLD, D.SlotNames[w.slot]) .. "   " .. best.link,
+                    sub = main .. (detail and ("\n" .. detail) or ""), sub2 = alsoLine(finds, best),
+                    sub3 = color(GRAY, "Now: ") .. now, right = color(GREEN, ns.Gear.UpText(best.cmp)) })
+        else
+            P.Row({ icon = w.link and nil or "Interface\\PaperDoll\\UI-Backpack-EmptySlot", link = w.link,
+                    title = color(GOLD, D.SlotNames[w.slot]) .. "   " .. (w.link or "Empty slot"),
+                    sub = color(GRAY, "No upgrade found yet from quests, dungeons, the AH or crafting."),
+                    right = color(GRAY, w.link and (w.gap .. " levels below you") or "empty") })
         end
     end
-    local counts = R.Counts
-    P.Note(string.format("Searched %d dungeon items, %d auction house items and %d craftable items.",
-        counts.dungeon, counts.ah, counts.craft), GRAY)
     -- Other slots can still have good finds.
     local weakSet = {}
     for _, w in ipairs(weak) do weakSet[w.slot] = true end
@@ -781,12 +906,12 @@ pages.Gear = function()
         return a.id < b.id
     end)
     if #extra > 0 then
-        P.Header("Other upgrades you could get")
-        for i = 1, math.min(6, #extra) do
+        P.SubHeader("Other slots")
+        for i = 1, math.min(5, #extra) do
             local f = extra[i]
             local main, detail = R.Describe(f)
-            P.Row({ link = f.link, title = color(GOLD, D.SlotNames[f.slot]) .. "   " .. f.link, sub = main, sub2 = detail, sub3 = ns.Gear.Why(f.link, f.cmp),
-                    right = color(GREEN, string.format("+%.1f", f.cmp.delta)) })
+            P.Row({ link = f.link, title = color(GOLD, D.SlotNames[f.slot]) .. "   " .. f.link, sub = main, sub2 = detail,
+                    right = color(GREEN, ns.Gear.UpText(f.cmp)) })
         end
     end
     for _, hint in ipairs(R.MissingData()) do P.Note(hint, GRAY) end
@@ -803,7 +928,7 @@ pages.Gear = function()
         local main, detail = ns.Research.Describe(f)
         P.Row({ link = f.link, title = color(GOLD, "Level " .. f.reqLevel) .. "   " .. f.link,
                 sub = (D.SlotNames[f.slot] or "") .. ": " .. main, sub2 = detail, sub3 = ns.Gear.Why(f.link, f.cmp),
-                right = color(GREEN, string.format("+%.1f", f.cmp.delta)) })
+                right = color(GREEN, ns.Gear.UpText(f.cmp)) })
     end
 
     P.Section("Equipped", "Equipped", 2)
@@ -814,7 +939,7 @@ pages.Gear = function()
             local dura = ""
             if g.dura and g.dura < 0.5 then dura = ", " .. color(RED, string.format("%d%% durability", g.dura * 100)) end
             P.Row({ link = g.link, sub = D.SlotNames[slot] .. ", item level " .. g.ilvl .. dura,
-                    right = color(GRAY, string.format("score %.0f", g.score)) })
+                    right = color(GRAY, "item level " .. (g.ilvl or "?")), tip = string.format("Score for your spec: %.0f", g.score or 0) })
         end
     end
 end
@@ -845,7 +970,7 @@ pages.Bags = function()
     local short = { AH = "Auction", DE = "Disenchant", VENDOR = "Vendor", KEEP = "Keep" }
 
     local sections = {
-        { "AH", "Sell on the auction house", "Worth more there than at a vendor, even after the 5% cut." },
+        { "AH", "Sell on the auction house", "Worth more there than at a vendor, even after the auction house's 5% fee." },
         { "DE", "Disenchant", "The materials are worth more than selling the item." },
         { "VENDOR", "Sell to a vendor", "Nothing beats the vendor price." },
         { "KEEP", "Keep", "Upgrades, quest items and materials your recipes use." },
@@ -897,7 +1022,7 @@ pages.Professions = function()
     for _, p in ipairs(profs) do
         if #tiles < 3 then
             local capped = (p.rank or 0) >= (p.max or 1)
-            tiles[#tiles + 1] = { string.format("%d/%d", p.rank or 0, p.max or 0), p.name .. (capped and "  (capped)" or ""), capped and "ff8040" or nil }
+            tiles[#tiles + 1] = { string.format("%d/%d", p.rank or 0, p.max or 0), p.name .. (capped and "  (trainer raises the cap)" or ""), capped and "ff8040" or nil }
         end
     end
     local favor = CR.Favor()
@@ -911,7 +1036,7 @@ pages.Professions = function()
         local short, long = PR.Verdict(plan)
         local mp = ns.Mats.Plan(r, plan.value)
         local link = r.item and select(2, ns.C.GetItemInfo(r.item))
-        local make = plan.canMake and color(GREEN, "  ·  can make now") or color("ff8080", "  ·  missing materials")
+        local make = plan.canMake and color(GREEN, "  ·  can make now") or color(GRAY, "  ·  need materials")
         P.Row({ link = link, icon = (not link) and ICONS.Professions or nil,
                 title = color(PR.DiffColor[r.diff] or "ffffff", name) .. (chance and color(GRAY, "  ·  " .. chance) or "") .. make,
                 sub = ns.Mats.Line(mp), sub2 = ns.Mats.Summary(mp) .. color(GRAY, "   ·   Then: ") .. long, right = short })
@@ -930,7 +1055,7 @@ pages.Professions = function()
             local ups = PR.SkillUps(p.name)
             P.SubHeader("Level it up")
             if #ups == 0 then
-                P.Note("None of your recipes give skill points anymore. See Recipes to get below, or visit a trainer.", GRAY)
+                P.Note("Your recipes are all gray now (no more skill points). A trainer or Recipes to get has new ones.", GRAY)
             end
             for i = 1, math.min(4, #ups) do
                 recipeRow(ups[i].name, PR.Recipe(p.name, ups[i].name), CHANCE[ups[i].diff])
@@ -958,7 +1083,7 @@ pages.Professions = function()
                 local gmp = ns.Mats.Plan(g.r, g.plan.value)
                 P.Row({ link = link, title = g.name, sub = why, sub2 = color(GRAY, "Get it: ") .. g.where,
                         sub3 = color(GRAY, "Materials: ") .. ns.Mats.Summary(gmp),
-                        right = g.cost and (ns.Gold.Affordable(g.costCopper) and color(GOLD, g.cost) or color(RED, g.cost .. "  save up first")) or nil })
+                        right = g.cost and (ns.Gold.Affordable(g.costCopper) and color(GOLD, g.cost) or color(GRAY, g.cost .. "  after your safety net")) or nil })
             end
         elseif not gathering then
             P.Note("Open your " .. p.name .. " window once so its recipes are recorded.", GOLD)
@@ -1023,8 +1148,10 @@ pages.Money = function()
         P.Section("Safety", "Safety net", 0)
         P.Header("Your gold safety net", "on this character")
         P.Tip("safety", "Your safety net keeps gold for what every character needs: new spells from your class trainer, and repairs. Gold above it is yours to spend on fun.")
+        P.Bar("Safety net", math.min(money, reserve), math.max(reserve, 1), money >= reserve and "4cff4c" or "ffd100",
+            M(math.min(money, reserve)) .. " of " .. M(reserve))
         P.Row({ icon = ICONS.Coin, title = "Spendable", sub = "What you can spend on crafting and the AH without touching your safety net",
-                right = color(spendable > 0 and GREEN or RED, M(spendable)) })
+                right = spendable > 0 and color(GREEN, M(spendable)) or color(GRAY, "0, all set aside") })
         P.Row({ icon = ICONS.Repair, title = "Safety net", sub = "Kept aside for the things you'll need", right = M(reserve) })
         for _, p in ipairs(parts) do
             local note = p.known and "" or color(GRAY, (p.label:find("training") and "  (visit your class trainer once to see the real cost)" or "  (estimate until your next repair)"))
@@ -1043,7 +1170,7 @@ pages.Money = function()
         local goal = GO.Goal()
         if goal then
             P.SubHeader("Saving for")
-            P.Bar(goal.name .. (goal.default and color(GRAY, "  (Classic price; /fc goal to change)") or ""), math.min(money, goal.amount), goal.amount,
+            P.Bar(goal.name .. (goal.default and color(GRAY, "  (Classic price; change in Settings > Gold)") or ""), math.min(money, goal.amount), goal.amount,
                 money >= goal.amount and "4cff4c" or "ffd100", M(money) .. " / " .. M(goal.amount))
             local rate, eta = GO.Rate(), GO.TimeTo(goal.amount)
             local msg
@@ -1280,7 +1407,7 @@ pages.Talents = function()
                         sub = s.note or "The next " .. spec.name .. " pick in the same build", right = string.format("%d / %d", s.rank, s.max) })
             end
         else
-            P.Note(#g.remaining > 0 and "The next talents in the build are locked; spend points higher in the tree first."
+            P.Note(#g.remaining > 0 and "The next talents in the build unlock after more points in this tree."
                 or "You've finished this build.", GRAY)
         end
         if #g.remaining > 1 then
@@ -1312,8 +1439,7 @@ pages.Talents = function()
                     right = string.format("%d / %d", t.rank, t.max) })
         end
         if shown == 0 then P.Note("Nothing left to take in this tree.", GRAY) end
-        P.Note("There's no Forever build for " .. spec.name .. " built in yet, so this is the tree order, not a recommendation. "
-            .. "Leave a Note to Claude with the spec you want and a build can be added.", GRAY)
+        P.Note("No suggested build for " .. spec.name .. " yet, so these are listed in tree order.", GRAY)
     end
 
     -- Other trees, briefly (with your talents).
@@ -1346,7 +1472,7 @@ pages.Quests = function()
     P.Section("Active", "In progress (" .. #t.active .. ")", 2)
     P.Header("In progress", "best first")
     P.Tip("quests", "Quest colors compare the quest to your level: yellow and orange give the best XP, green is quick and easy, gray gives little XP, red is too hard for now.")
-    if #t.active == 0 then P.Note("Your quest log is empty. Pick up quests in one of the zones below.", GRAY) end
+    if #t.active == 0 then P.Note("Your quest log is empty. The Zones tab shows good places to pick some up.", GRAY) end
     for _, q in ipairs(t.active) do
         local hex = ns.Quests.DiffHex[q.diff]
         P.Row({ title = color(hex, string.format("[%d]  %s", q.level or 0, q.title)), sub = q.advice,
@@ -1416,12 +1542,13 @@ local function drawSectionTabs()
         b.line:SetShown(active)
         b:SetBackdropColor(1, 1, 1, active and 0.10 or 0.03)
         b:SetBackdropBorderColor(1, 1, 1, active and 0.25 or 0.10)
-        local w = b.text:GetStringWidth() + 26
-        if x + w > CONTENT_W and x > 0 then x, rowY = 0, rowY + 34 end
+        local w = b.text:GetStringWidth() + 32
+        if x + w > CONTENT_W and x > 0 then x, rowY = 0, rowY + 46 end
         b:SetPoint("TOPLEFT", content, "TOPLEFT", x, -rowY)
-        b:SetSize(w, 30)
-        x = x + w + 6
+        b:SetSize(w, 40)
+        x = x + w + 8
     end
+    return math.floor((rowY - sec.tabsY - 4) / 46) + 1
 end
 
 function ns.RenderUI()
@@ -1442,7 +1569,12 @@ function ns.RenderUI()
         ok, err = pcall(pages[current])
     end
     sec.skipping = false
-    drawSectionTabs()
+    local rows = drawSectionTabs()
+    -- Tabs wrapped onto more rows than space was left for: draw again with room.
+    if rows and rows ~= (tabRows[current] or 1) then
+        tabRows[current] = rows
+        return ns.RenderUI()
+    end
     if not ok then
         ns:LogError("page " .. current, err)
         P.Note("Something went wrong drawing this page (saved to the error log): " .. tostring(err), RED)
@@ -1457,8 +1589,8 @@ ns.RefreshUI = function() ns:Debounce("ui", 0.3, ns.RenderUI) end
 
 local function navButton(parent, name, index)
     local b = CreateFrame("Button", nil, parent)
-    b:SetSize(SIDEBAR - 16, 34)
-    b:SetPoint("TOPLEFT", 8, -8 - (index - 1) * 38)
+    b:SetSize(SIDEBAR - 16, 40)
+    b:SetPoint("TOPLEFT", 8, -8 - (index - 1) * 44)
     b.bg = b:CreateTexture(nil, "BACKGROUND")
     b.bg:SetAllPoints()
     b.bar = b:CreateTexture(nil, "ARTWORK")
@@ -1533,33 +1665,21 @@ local function build()
     help:SetJustifyH("LEFT")
     help:SetText("/fc help for commands\nDrag the title bar to move")
     local noteBtn = CreateFrame("Button", nil, side, "UIPanelButtonTemplate")
-    noteBtn:SetSize(SIDEBAR - 20, 24)
+    noteBtn:SetSize(SIDEBAR - 20, 32)
     noteBtn:SetPoint("BOTTOMLEFT", help, "TOPLEFT", -2, 8)
-    noteBtn:SetText("Note to Claude")
+    noteBtn:SetText("Leave a note")
     noteBtn:SetScript("OnClick", function() StaticPopup_Show("FOREVERCOMPANION_NOTE", current) end)
     noteBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Leave a note about what you see. It's saved with the page you're on; /reload or log out, then ask Claude to read your notes.", 1, 1, 1, 1, true)
+        GameTooltip:SetText("Leave a note about what you see. It's saved with the page you're on (written to disk when you /reload or log out).", 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     noteBtn:SetScript("OnLeave", GameTooltip_Hide)
-    local touchBtn = CreateFrame("Button", nil, side, "UIPanelButtonTemplate")
-    touchBtn:SetSize(SIDEBAR - 20, 24)
-    touchBtn:SetPoint("BOTTOMLEFT", noteBtn, "TOPLEFT", 0, 6)
-    local function touchLabel() touchBtn:SetText("Touch mode: " .. (ns.db.settings.touch and "on" or "off")) end
-    touchLabel()
-    touchBtn:SetScript("OnClick", function() ns:SetTouch(not ns.db.settings.touch) touchLabel() end)
-    touchBtn:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Makes the window bigger so it's easier to tap. You can drag lists to scroll either way.", 1, 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    touchBtn:SetScript("OnLeave", GameTooltip_Hide)
 
     -- Scrollable content
     scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", SIDEBAR + 14, -54)
-    scroll:SetPoint("BOTTOMRIGHT", -32, 46)
+    scroll:SetPoint("BOTTOMRIGHT", -32, 58)
     content = CreateFrame("Frame", nil, scroll)
     content:SetSize(CONTENT_W, 10)
     scroll:SetScrollChild(content)
@@ -1573,12 +1693,12 @@ local function build()
     local line = frame:CreateTexture(nil, "ARTWORK")
     line:SetColorTexture(1, 1, 1, 0.06)
     line:SetHeight(1)
-    line:SetPoint("BOTTOMLEFT", SIDEBAR + 1, 40)
-    line:SetPoint("BOTTOMRIGHT", -1, 40)
+    line:SetPoint("BOTTOMLEFT", SIDEBAR + 1, 52)
+    line:SetPoint("BOTTOMRIGHT", -1, 52)
     footerButtons = {}
     local function footerButton(label, tip, fn)
         local b = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        b:SetSize(150, 24)
+        b:SetSize(160, 36)
         if #footerButtons == 0 then b:SetPoint("BOTTOMLEFT", SIDEBAR + 14, 9)
         else b:SetPoint("LEFT", footerButtons[#footerButtons], "RIGHT", 8, 0) end
         b:SetText(label)
@@ -1631,7 +1751,7 @@ function ForeverCompanion_Toggle() ns:ToggleUI() end
 ns.CurrentPage = function() return current end
 
 StaticPopupDialogs["FOREVERCOMPANION_NOTE"] = {
-    text = "Note to Claude about the %s page (saved when you /reload or log out):",
+    text = "Note about the %s page (saved when you /reload or log out):",
     button1 = "Save", button2 = CANCEL,
     hasEditBox = 1, editBoxWidth = 320, maxLetters = 500,
     OnShow = function(self)

@@ -142,8 +142,13 @@ local function nag()
     end
 end
 
-ns:On("PLAYER_LEVEL_UP", function() C_Timer.After(2, nag) end)
-ns:Listen("READY", function() C_Timer.After(8, nag) end)
+-- The level-up card already suggests the next talent; chat only when cards are off.
+ns:On("PLAYER_LEVEL_UP", function()
+    if ns.db.settings.celebrate ~= false then return end
+    C_Timer.After(2, nag)
+end)
+-- At login, just save the diagnostics quietly (no reminder in chat).
+ns:Listen("READY", function() C_Timer.After(8, function() pcall(S.SaveDiagnostics) end) end)
 
 ns:Command("spec", "show your spec, talents and what to take next", function()
     local r = S.Report()

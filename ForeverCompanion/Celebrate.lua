@@ -52,8 +52,6 @@ local function buildCard()
     f.line1:SetWordWrap(false)
 
     f.line2 = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    f.line2:SetPoint("TOPLEFT", f.line1, "BOTTOMLEFT", 0, -4)
-    f.line2:SetPoint("RIGHT", -14, 0)
     f.line2:SetJustifyH("LEFT")
     f.line2:SetSpacing(2)
 
@@ -62,7 +60,7 @@ local function buildCard()
     f.close:SetScript("OnClick", function() CE.Next() end)
 
     f.button = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    f.button:SetSize(110, 26)
+    f.button:SetSize(110, 36)
     f.button:SetPoint("BOTTOMRIGHT", -12, 10)
     f.button:SetScript("OnClick", function()
         local action = f.action
@@ -85,10 +83,14 @@ local function show(c)
     card.icon:SetTexture(c.icon or "Interface\\Icons\\INV_Misc_Gift_01")
     card.title:SetText(c.title)
     card.line1:SetText(c.line1 or "")
-    card.line2:SetText(c.line2 or "")
-    card:SetHeight(c.line2 and c.line2 ~= "" and 112 or 96)
     card.action = c.action
     card.button:SetShown(c.action ~= nil)
+    card.line2:ClearAllPoints()
+    card.line2:SetPoint("TOPLEFT", card.line1, "BOTTOMLEFT", 0, -4)
+    card.line2:SetPoint("RIGHT", c.action and -130 or -14, 0)
+    card.line2:SetText(c.line2 or "")
+    local textH = 14 + card.title:GetStringHeight() + 4 + card.line1:GetStringHeight() + 4 + card.line2:GetStringHeight() + 14
+    card:SetHeight(math.max(96, textH, c.action and 96 or 0))
     card.button:SetText(c.buttonText or "Equip")
     card.button:SetEnabled(not (c.needsOutOfCombat and InCombatLockdown()))
     card.timeLeft = c.duration or 12
@@ -105,7 +107,8 @@ end
 
 function CE.Push(c)
     if not enabled() then return end
-    if card and card:IsShown() then
+    -- Never interrupt a fight: hold cards until combat ends.
+    if (card and card:IsShown()) or InCombatLockdown() or UnitAffectingCombat("player") then
         queue[#queue + 1] = c
     else
         show(c)
@@ -113,7 +116,10 @@ function CE.Push(c)
 end
 
 -- Equip buttons only work out of combat.
-ns:On("PLAYER_REGEN_ENABLED", function() if card and card:IsShown() then card.button:SetEnabled(true) end end)
+ns:On("PLAYER_REGEN_ENABLED", function()
+    if card and card:IsShown() then card.button:SetEnabled(true)
+    elseif #queue > 0 then C_Timer.After(1, function() if not (card and card:IsShown()) then CE.Next() end end) end
+end)
 ns:On("PLAYER_REGEN_DISABLED", function() if card and card:IsShown() and card.action then card.button:SetEnabled(false) end end)
 
 ----------------------------------------------------------------------
@@ -153,10 +159,15 @@ local function judge(link)
     if cmp.unusable or cmp.delta <= 0.5 or cmp.note == "equipped" then return true end
     local why = ns.Gear.Why(link, cmp, 3)
     local slotName = D.SlotNames[cmp.slot] or "gear"
-    local pct = cmp.pct and string.format("%+.0f%%", cmp.pct) or string.format("+%.1f", cmp.delta)
+    local pct = ns.Gear.UpText(cmp)
     local level = UnitLevel("player")
+    -- Celebrate at the size of the moment: small upgrades get one chat line.
+    if (reqLevel or 0) <= level and cmp.pct and cmp.pct < 3 and cmp.delta < 2 then
+        ns:Print("small upgrade in your bags: " .. link .. " (" .. pct .. ", " .. slotName .. ")")
+        return true
+    end
     if (reqLevel or 0) > level then
-        CE.Push({ icon = icon, title = "|cff80d4ffSaved for later|r", line1 = link,
+        CE.Push({ icon = icon, title = "|cff80d4ffFor later: wear at level " .. reqLevel .. "|r", line1 = link,
                   line2 = string.format("Upgrade for your %s at level %d (%s for %s).", slotName, reqLevel, pct, ns:SpecLabel()),
                   duration = 8 })
     else

@@ -491,6 +491,14 @@ local function fmtStat(key, d)
     return string.format("%+d %s", math.floor(d + (d >= 0 and 0.5 or -0.5)), name)
 end
 
+-- How much better, for display: "+8%" when there's something to compare
+-- against, "Upgrade" (empty slot) otherwise. The raw score stays in tooltips.
+function G.UpText(cmp)
+    if not cmp then return "" end
+    if cmp.pct and cmp.pct > 0 then return string.format("+%d%%", math.max(1, math.floor(cmp.pct + 0.5))) end
+    return "Upgrade"
+end
+
 -- Returns a colored, comma-separated explanation (or nil), and a plain list.
 function G.Why(link, cmp, limit)
     if not (link and cmp and cmp.slot) or cmp.unusable then return end

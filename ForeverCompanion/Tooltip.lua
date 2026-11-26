@@ -40,7 +40,7 @@ local function addLines(tooltip)
         if d > 0.5 then r, g, b, word = 0.3, 1, 0.3, "Upgrade"
         elseif d < -0.5 then r, g, b, word = 1, 0.45, 0.45, "Downgrade" end
         tooltip:AddDoubleLine(string.format("%s for %s (%s)", word, ns.Data.SlotNames[cmp.slot] or "gear", ns:SpecLabel()),
-            string.format("%+.1f%s", d, cmp.pct and string.format("  %+.0f%%", cmp.pct) or ""), r, g, b, r, g, b)
+            cmp.pct and string.format("%+.0f%%", cmp.pct) or (d > 0.5 and "Upgrade" or string.format("%+.1f", d)), r, g, b, r, g, b)
         local why = ns.Gear.Why(link, cmp, 5)
         if why then tooltip:AddLine("Why: " .. why, 0.85, 0.85, 0.85, true) end
         if cmp.note then tooltip:AddLine(cmp.note, GRAY[1], GRAY[2], GRAY[3]) end
@@ -53,11 +53,11 @@ local function addLines(tooltip)
     -- Values side by side
     if a.action ~= "KEEP" or a.vendor > 0 or a.market or a.de then
         tooltip:AddDoubleLine("  Sell to vendor", money(a.vendor), 0.85, 0.85, 0.85, 1, 1, 1)
-        local ahText = a.ah and ("~" .. ns.Money(a.ah) .. " after cut") or (a.market and "soulbound" or "no price yet")
+        local ahText = a.ah and ("~" .. ns.Money(a.ah) .. " after AH fee") or (a.market and "soulbound" or "no price yet")
         tooltip:AddDoubleLine("  Auction house" .. (a.ahSource and (" (" .. a.ahSource .. ")") or ""), ahText, 0.85, 0.85, 0.85, 1, 1, 1)
         if a.de then
             local who = a.canDE and "" or (" (needs " .. a.deSkill .. " Enchanting)")
-            tooltip:AddDoubleLine("  Disenchant" .. who, "~" .. ns.Money(a.de) .. (a.dePartial and " +?" or ""),
+            tooltip:AddDoubleLine("  Disenchant" .. who, "~" .. ns.Money(a.de) .. (a.dePartial and " (partial)" or ""),
                 0.85, 0.85, 0.85, 1, 1, 1)
         end
     end

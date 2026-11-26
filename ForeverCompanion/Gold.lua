@@ -42,7 +42,7 @@ local function recordClassTrainer()
     if #list > 0 and ns.char then
         ns.char.training = list
         ns.char.trainingTime = time()
-        ns:Print(string.format("recorded %d spells still to learn from your class trainer.", #list))
+        ns:Debug(string.format("recorded %d spells still to learn from your class trainer.", #list))
     end
 end
 ns:On("TRAINER_SHOW", function() C_Timer.After(0.6, function() pcall(recordClassTrainer) end) end)
