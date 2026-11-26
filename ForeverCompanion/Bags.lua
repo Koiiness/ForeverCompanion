@@ -63,7 +63,7 @@ function B.Find(query)
                 if name and name:lower():find(query, 1, true) then
                     local r = results[item.id]
                     if not r then r = { link = item.link, where = {} } results[item.id] = r end
-                    local k = key .. " (" .. where .. ")"
+                    local k = ns.CharLabel(char, key) .. " (" .. where .. ")"
                     r.where[k] = (r.where[k] or 0) + (item.count or 1)
                 end
             end

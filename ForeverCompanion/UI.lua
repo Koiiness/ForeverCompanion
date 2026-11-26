@@ -736,7 +736,7 @@ pages.Professions = function()
         if other ~= c and other.professions and #other.professions > 0 then
             local parts = {}
             for _, p in ipairs(other.professions) do parts[#parts + 1] = p.name .. " " .. (p.rank or 0) end
-            others[#others + 1] = { key, table.concat(parts, ", ") }
+            others[#others + 1] = { ns.CharLabel(other, key), table.concat(parts, ", ") }
         end
     end
     if #others > 0 then

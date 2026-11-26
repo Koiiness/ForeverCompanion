@@ -139,8 +139,28 @@ local function realmName()
     return r
 end
 
+-- Characters are keyed by their unique character ID (GUID). Name and realm
+-- aren't enough: the realm can read as blank at login, and several
+-- characters can share a name on different realms.
 function ns:CharKey()
-    return realmName() .. " - " .. (UnitName("player") or "?")
+    return UnitGUID("player") or (realmName() .. " - " .. (UnitName("player") or "?"))
+end
+
+-- Full character name. Forever names have a first and last name; the last
+-- name may come back as UnitName's second value or in GetUnitName's "First-Last".
+function ns:FullName()
+    local first, second = UnitName("player")
+    if second and second ~= "" then return first .. " " .. second end
+    local full = GetUnitName and GetUnitName("player", true)
+    if full and full ~= "" then return (full:gsub("%-", " ")) end
+    return first
+end
+
+-- How to show a character: "Peaches Foryouandme (Priest 33)".
+function ns.CharLabel(char, key)
+    if not char or not char.name then return tostring(key) end
+    local class = char.class and (char.class:sub(1, 1) .. char.class:sub(2):lower()) or nil
+    return (char.fullName or char.name) .. ((class or char.level) and (" (" .. (class or "") .. (char.level and (" " .. char.level) or "") .. ")") or "")
 end
 
 ns:On("ADDON_LOADED", function(_, name)
@@ -153,14 +173,23 @@ end)
 ns:On("PLAYER_LOGIN", function()
     local key = ns:CharKey()
     local chars = ns.db.chars
-    -- Early versions saved characters with a blank realm (" - Name").
-    local oldKey = " - " .. (UnitName("player") or "?")
-    if oldKey ~= key and chars[oldKey] and not chars[key] then
-        chars[key], chars[oldKey] = chars[oldKey], nil
+    -- Older versions keyed characters by "Realm - Name", which mixed up
+    -- same-named characters. Adopt an old entry only if its class matches.
+    if not chars[key] then
+        local myName, myClass = UnitName("player"), select(2, UnitClass("player"))
+        for _, old in ipairs({ " - " .. (myName or "?"), "Forever - " .. (myName or "?"), realmName() .. " - " .. (myName or "?") }) do
+            local o = chars[old]
+            if old ~= key and o and not o.guid and o.class == myClass then
+                chars[key], chars[old] = o, nil
+                break
+            end
+        end
     end
     chars[key] = chars[key] or {}
     local char = chars[key]
+    char.guid = UnitGUID("player")
     char.name = UnitName("player")
+    char.fullName = ns:FullName()
     char.realm = realmName()
     char.class = select(2, UnitClass("player"))
     char.faction = UnitFactionGroup("player")
@@ -246,7 +275,7 @@ function ns:AddNote(text)
     if text == "" then return false end
     ns.db.notes = ns.db.notes or {}
     local page = ns.CurrentPage and ns.CurrentPage() or nil
-    table.insert(ns.db.notes, { t = date("%Y-%m-%d %H:%M"), char = ns:CharKey(), level = UnitLevel("player"),
+    table.insert(ns.db.notes, { t = date("%Y-%m-%d %H:%M"), char = ns.CharLabel(ns.char, ns:CharKey()), level = UnitLevel("player"),
                                 page = page, zone = GetZoneText and GetZoneText() or nil, text = text })
     return true
 end

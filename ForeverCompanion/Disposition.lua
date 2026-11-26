@@ -86,8 +86,26 @@ function DS.OddsLines(a)
 end
 
 -- Items you use rather than sell. Returns a reason, or nil.
-local TOOLS = { "^Runed .* Rod$", "Rod$", "Mining Pick", "Skinning Knife", "Blacksmith Hammer",
-                "Arclight Spanner", "Fishing Pole", "Gyromatic Micro%-Adjustor", "Philosopher's Stone", "Hearthstone" }
+-- Profession tools, by item ID and by exact name. Several are technically
+-- weapons (Blacksmith Hammer is a mace, Mining Pick an axe), so they're
+-- matched exactly rather than by item type.
+local TOOL_IDS = {
+    [5956] = "Blacksmithing", [2901] = "Mining", [7005] = "Skinning", [6219] = "Engineering",
+    [10498] = "Engineering", [9149] = "Alchemy", [6256] = "Fishing", [6365] = "Fishing",
+    [6366] = "Fishing", [6367] = "Fishing", [12225] = "Fishing", [19022] = "Fishing", [19970] = "Fishing",
+    [6218] = "Enchanting", [6339] = "Enchanting", [11130] = "Enchanting", [11145] = "Enchanting",
+    [16207] = "Enchanting", [6948] = "travel",
+}
+local TOOL_NAMES = {
+    ["Blacksmith Hammer"] = "Blacksmithing", ["Mining Pick"] = "Mining", ["Skinning Knife"] = "Skinning",
+    ["Arclight Spanner"] = "Engineering", ["Gyromatic Micro-Adjustor"] = "Engineering",
+    ["Philosopher's Stone"] = "Alchemy", ["Hearthstone"] = "travel",
+}
+-- Name patterns for tool families (Forever may add new ones).
+local TOOL_PATTERNS = {
+    { "^Runed .* Rod$", "Enchanting" }, { "Fishing Pole$", "Fishing" }, { "Pickaxe$", "Mining" },
+    { "Blacksmith Hammer$", "Blacksmithing" }, { "Mining Pick$", "Mining" }, { "Skinning Knife$", "Skinning" },
+}
 -- Trade goods subclass -> professions that use it.
 local MATS = {
     [5] = { "Tailoring", "First Aid" }, [6] = { "Leatherworking" }, [7] = { "Blacksmithing", "Engineering" },
@@ -96,15 +114,20 @@ local MATS = {
 }
 DS.ConsumableOutdated = 15  -- consumables this many levels below you are fair game to sell
 
-function DS.KeepReason(name, classID, subclassID, reqLevel)
-    -- Name checks skip armor and most weapons so gear like "... Rod" staves isn't caught.
-    if name and classID ~= 4 then
-        for _, pat in ipairs(TOOLS) do
-            if name:find(pat) and (classID ~= 2 or pat == "Fishing Pole" or pat == "Mining Pick") then
-                return "profession tool"
-            end
+function DS.ToolFor(itemID, name)
+    local prof = (itemID and TOOL_IDS[itemID]) or (name and TOOL_NAMES[name])
+    if not prof and name then
+        for _, p in ipairs(TOOL_PATTERNS) do
+            if name:find(p[1]) then prof = p[2] break end
         end
     end
+    return prof
+end
+
+function DS.KeepReason(name, classID, subclassID, reqLevel, itemID)
+    local tool = DS.ToolFor(itemID, name)
+    if tool == "travel" then return "you need this" end
+    if tool then return tool .. " tool" end
     if classID == 0 then  -- potions, elixirs, food, water, bandages, scrolls
         local level = UnitLevel("player")
         if (reqLevel or 0) > 0 and reqLevel < level - DS.ConsumableOutdated then return nil end
@@ -153,7 +176,7 @@ function DS.Evaluate(item)
         if crate then return decide("KEEP", "fills your " .. crate) end
     end
     if quality == 0 then return decide("VENDOR", "junk") end
-    local keep = DS.KeepReason(name, classID, subclassID, reqLevel)
+    local keep = DS.KeepReason(name, classID, subclassID, reqLevel, id)
     if keep then return decide("KEEP", keep) end
 
     local isGear = equipLoc and equipLoc ~= "" and (classID == 2 or classID == 4)

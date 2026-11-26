@@ -288,7 +288,7 @@ function R.BuildIndex()
             for name, r in pairs(rec.list or {}) do
                 if r.item then
                     add(bySlot, r.item, { kind = "craft", prof = prof, recipe = name, learned = r.learned ~= false,
-                                          source = r.source, who = char.name or key, mine = (char == ns.char) })
+                                          source = r.source, who = ns.CharLabel(char, key), mine = (char == ns.char) })
                     counts.craft = counts.craft + 1
                 end
             end
