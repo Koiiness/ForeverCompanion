@@ -129,6 +129,13 @@ function DS.KeepReason(name, classID, subclassID, reqLevel, itemID)
     if tool == "travel" then return "you need this" end
     if tool then return tool .. " tool" end
     if classID == 0 then  -- potions, elixirs, food, water, bandages, scrolls
+        -- Buff food and XP boosts are worth keeping at any level.
+        local link = itemID and select(2, C.GetItemInfo(itemID))
+        for _, line in ipairs(link and C.TooltipLines(link) or {}) do
+            local l = line:lower()
+            if l:find("experience", 1, true) then return "gives bonus experience" end
+            if l:find("well fed", 1, true) then return "buff food" end
+        end
         local level = UnitLevel("player")
         if (reqLevel or 0) > 0 and reqLevel < level - DS.ConsumableOutdated then return nil end
         return "consumable you can use"

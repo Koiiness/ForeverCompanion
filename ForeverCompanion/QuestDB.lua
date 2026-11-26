@@ -192,6 +192,115 @@ function QD.StartZoneScan()
     end)
 end
 
+----------------------------------------------------------------------
+-- Pattern sources: where to get the recipe item (Pattern:, Plans:, ...)
+-- for a recipe you haven't learned: vendors, mob drops, quests, objects.
+-- Forever's client doesn't report recipe sources, so this fills the gap.
+----------------------------------------------------------------------
+local RECIPE_PREFIXES = { "Pattern: ", "Plans: ", "Formula: ", "Recipe: ", "Schematic: ", "Manual: ", "Design: ", "Technique: " }
+QD.nameIndexReady = false
+
+-- Builds QuestieDB's item name index in small steps so there's no freeze.
+function QD.BuildNameIndex()
+    if QD.nameIndexReady or QD.nameIndexBuilding or not QD.Has() then return end
+    local I = _G.LibQuestieDB.Item
+    if not I.BuildNameIndexAsync then
+        QD.nameIndexReady = I.IdsByName ~= nil
+        return
+    end
+    QD.nameIndexBuilding = true
+    local co = coroutine.create(function() I.BuildNameIndexAsync(400) end)
+    local ticker
+    ticker = C_Timer.NewTicker(0.05, function()
+        if InCombatLockdown() then return end
+        local ok = coroutine.resume(co)
+        if not ok or coroutine.status(co) == "dead" then
+            ticker:Cancel()
+            QD.nameIndexBuilding = false
+            QD.nameIndexReady = ok
+            if ns.Research then ns.Research.Invalidate() end
+            if ns.RefreshUI then ns.RefreshUI() end
+        end
+    end)
+end
+
+local sourceCache = {}
+-- Returns { itemID, vendors = {..}, drops = {..}, quests = {..}, objects = {..}, favor = bool } or nil.
+function QD.PatternSources(recipeName)
+    if not (recipeName and QD.Has() and QD.nameIndexReady) then return end
+    local cached = sourceCache[recipeName]
+    if cached ~= nil then return cached or nil end
+    local L = _G.LibQuestieDB
+    local I, N, Q, O = L.Item, L.Npc, L.Quest, L.Object
+    local ids
+    for _, pre in ipairs(RECIPE_PREFIXES) do
+        local ok, r = pcall(I.IdsByName, pre .. recipeName)
+        if ok and r and #r > 0 then ids = r break end
+    end
+    if not ids then sourceCache[recipeName] = false return end
+    local myFaction = UnitFactionGroup("player") == "Horde" and "H" or "A"
+    local favorVendors = {}
+    for _, v in ipairs(ns.Crates and ns.Crates.Vendors or {}) do favorVendors[v] = true end
+    local out = { itemID = ids[1], vendors = {}, drops = {}, quests = {}, objects = {}, favor = false }
+    local seen = {}
+    local function npcEntry(npc)
+        local name = N.name(npc)
+        if not name or seen[name] then return end
+        seen[name] = true
+        local f = N.friendlyToFaction and N.friendlyToFaction(npc)
+        return { name = name, zone = areaName(N.zoneID(npc)), friendly = (f == nil) or f:find(myFaction, 1, true) ~= nil }
+    end
+    for _, id in ipairs(ids) do
+        pcall(function()
+            for _, npc in ipairs(I.vendors(id) or {}) do
+                local e = npcEntry(npc)
+                if e then
+                    out.vendors[#out.vendors + 1] = e
+                    if favorVendors[e.name] then out.favor = true end
+                end
+            end
+            for _, npc in ipairs(I.npcDrops(id) or {}) do
+                local e = npcEntry(npc)
+                if e then out.drops[#out.drops + 1] = e end
+            end
+            for _, q in ipairs(I.questRewards(id) or {}) do out.quests[#out.quests + 1] = Q.name(q) or ("quest " .. q) end
+            if O then
+                for _, o in ipairs(I.objectDrops(id) or {}) do out.objects[#out.objects + 1] = O.name(o) or "an object" end
+            end
+        end)
+    end
+    -- Vendors friendly to you first.
+    table.sort(out.vendors, function(a, b)
+        if a.friendly ~= b.friendly then return a.friendly end
+        return a.name < b.name
+    end)
+    sourceCache[recipeName] = out
+    return out
+end
+
+-- One line: "sold by X (Zone); drops from Y (Zone) and 4 more; quest reward: Z".
+function QD.PatternSourceText(recipeName)
+    local s = QD.PatternSources(recipeName)
+    if not s then return end
+    local parts = {}
+    local function list(entries, verb, max)
+        if #entries == 0 then return end
+        local names = {}
+        for i = 1, math.min(max, #entries) do
+            local e = entries[i]
+            names[#names + 1] = e.name .. (e.zone and (" (" .. e.zone .. ")") or "")
+        end
+        local more = #entries - max
+        parts[#parts + 1] = verb .. " " .. table.concat(names, ", ") .. (more > 0 and (" and " .. more .. " more") or "")
+    end
+    list(s.vendors, "sold by", 2)
+    list(s.drops, "drops from", 2)
+    if #s.quests > 0 then parts[#parts + 1] = "quest reward: " .. table.concat(s.quests, ", ", 1, math.min(2, #s.quests)) end
+    if #s.objects > 0 then parts[#parts + 1] = "found in " .. s.objects[1] end
+    if #parts == 0 then return end
+    return table.concat(parts, "; ") .. (s.favor and " |cffffd100(Merchant's Favor)|r" or "")
+end
+
 -- A few quest names from a zone, for the plan.
 function QD.SampleNames(zone, max)
     local Q = _G.LibQuestieDB.Quest
@@ -203,6 +312,7 @@ end
 ns:Listen("READY", function()
     C_Timer.After(10, QD.StartScan)
     C_Timer.After(20, QD.StartZoneScan)
+    C_Timer.After(30, QD.BuildNameIndex)
 end)
 ns:On("PLAYER_LEVEL_UP", function()
     QD.rewards = nil

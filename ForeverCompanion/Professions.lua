@@ -324,6 +324,8 @@ function PR.ToGet(profName, limit)
             if upgrade or profit then
                 local where, cost = {}, nil
                 if r.source and r.source ~= "" then where[#where + 1] = r.source end
+                local qdText = ns.QuestDB and ns.QuestDB.PatternSourceText(name)
+                if qdText then where[#where + 1] = qdText end
                 local favor = r.source and (tonumber(r.source:match("Cost:%s*(%d+)")))
                 if favor and ns.Crates and r.source and (r.source:find("Favor") or r.source:find("Cost")) then cost = favor .. " Favor" end
                 local patternID, patternPrice = ns.Prices.PatternFor(name)

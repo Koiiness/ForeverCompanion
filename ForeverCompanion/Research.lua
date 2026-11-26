@@ -359,6 +359,7 @@ end
 function R.Describe(entry)
     local s = entry.source
     local text
+    local detail
     if s.kind == "quest" and s.pickup then
         text = "pick up " .. (s.quest or "a quest") .. (s.qlevel and (" [" .. s.qlevel .. "]") or "")
             .. (s.starter and (" from " .. s.starter) or "") .. (s.zone and (" in " .. s.zone) or "")
@@ -387,6 +388,8 @@ function R.Describe(entry)
             text = s.prof .. ": " .. (s.mine and "learn" or (s.who .. " could learn")) .. " " .. s.recipe
             local parts = {}
             if s.source and s.source ~= "" then parts[#parts + 1] = s.source end
+            local qdText = ns.QuestDB and ns.QuestDB.PatternSourceText(s.recipe)
+            if qdText then parts[#parts + 1] = "pattern " .. qdText end
             local drop = R.PatternDrop(s.recipe)
             if drop then
                 parts[#parts + 1] = "pattern drops in " .. drop.instance .. (drop.boss and (", " .. drop.boss) or "")
@@ -395,11 +398,17 @@ function R.Describe(entry)
             local patternID, price = ns.Prices.PatternFor(s.recipe)
             if price then parts[#parts + 1] = "pattern on AH ~" .. ns.Money(price)
             elseif patternID then parts[#parts + 1] = "pattern seen on AH" end
-            if #parts > 0 then text = text .. "  |cff9a9a9a(" .. table.concat(parts, "; ") .. ")|r" end
+            if #parts > 0 then
+                detail = "|cffffd100Get the pattern:|r " .. table.concat(parts, "; ")
+            elseif ns.QuestDB and ns.QuestDB.Has() and not ns.QuestDB.nameIndexReady then
+                detail = "|cff9a9a9aLooking up where to get the pattern...|r"
+            else
+                detail = "|cff9a9a9aNo vendor or drop known for this pattern; it's probably taught by your trainer.|r"
+            end
         end
     end
     local req = entry.reqLevel > UnitLevel("player") and ("  |cffff8040usable at level " .. entry.reqLevel .. "|r") or ""
-    return R.KindLabel[s.kind] .. ": " .. text .. req
+    return R.KindLabel[s.kind] .. ": " .. text .. req, detail
 end
 
 -- Explains which sources have no data yet and how to fill them.

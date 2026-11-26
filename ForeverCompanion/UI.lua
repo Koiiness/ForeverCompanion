@@ -180,6 +180,9 @@ function P.Row(opts)
         f.sub2 = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         f.sub2:SetJustifyH("LEFT")
         f.sub2:SetWordWrap(false)
+        f.sub3 = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        f.sub3:SetJustifyH("LEFT")
+        f.sub3:SetWordWrap(false)
         f.right = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         f.right:SetJustifyH("RIGHT")
         f.right:SetPoint("RIGHT", -10, 0)
@@ -219,7 +222,17 @@ function P.Row(opts)
     else
         w.icon:Hide()
     end
-    local h = opts.sub2 and 52 or (opts.sub and 38 or 26)
+    if opts.sub3 and not opts.sub2 then opts.sub2, opts.sub3 = opts.sub3, nil end
+    local h = opts.sub3 and 66 or (opts.sub2 and 52 or (opts.sub and 38 or 26))
+    w.sub3:ClearAllPoints()
+    if opts.sub3 then
+        w.sub3:SetPoint("TOPLEFT", w.sub2, "BOTTOMLEFT", 0, -3)
+        w.sub3:SetText(opts.sub3)
+        w.sub3:SetWidth(CONTENT_W - x - 14 - (opts.indent or 0))
+        w.sub3:Show()
+    else
+        w.sub3:Hide()
+    end
     w.title:ClearAllPoints()
     w.sub:ClearAllPoints()
     w.sub2:ClearAllPoints()
@@ -245,7 +258,7 @@ function P.Row(opts)
     w.title:SetWidth(CONTENT_W - x - 190 - (opts.indent or 0))
     w.right:SetText(opts.right or "")
     w.right:ClearAllPoints()
-    if opts.sub2 then
+    if opts.sub2 or opts.sub3 then
         -- Value sits on the title line so the two detail lines can use the full width.
         w.right:SetPoint("TOPRIGHT", opts.onClick and -20 or -10, -5)
         w.sub:SetWidth(CONTENT_W - x - 14 - (opts.indent or 0))
@@ -584,7 +597,8 @@ pages.Gear = function()
             local f = finds[kind][1]
             if f then
                 any = true
-                P.Row({ link = f.link, title = f.link, sub = R.Describe(f), sub2 = ns.Gear.Why(f.link, f.cmp),
+                local main, detail = R.Describe(f)
+                P.Row({ link = f.link, title = f.link, sub = main, sub2 = detail, sub3 = ns.Gear.Why(f.link, f.cmp),
                         right = color(GREEN, string.format("+%.1f", f.cmp.delta)), indent = 24 })
             end
         end
@@ -613,7 +627,8 @@ pages.Gear = function()
         P.Header("Other upgrades you could get")
         for i = 1, math.min(6, #extra) do
             local f = extra[i]
-            P.Row({ link = f.link, title = color(GOLD, D.SlotNames[f.slot]) .. "   " .. f.link, sub = R.Describe(f), sub2 = ns.Gear.Why(f.link, f.cmp),
+            local main, detail = R.Describe(f)
+            P.Row({ link = f.link, title = color(GOLD, D.SlotNames[f.slot]) .. "   " .. f.link, sub = main, sub2 = detail, sub3 = ns.Gear.Why(f.link, f.cmp),
                     right = color(GREEN, string.format("+%.1f", f.cmp.delta)) })
         end
     end

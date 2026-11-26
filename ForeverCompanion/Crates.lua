@@ -150,7 +150,8 @@ function CR.WantedRecipes()
     wantedCache, wantedTime = out, GetTime()
     for prof, rec in pairs(ns.char and ns.char.recipes or {}) do
         for name, r in pairs(rec.list or {}) do
-            if r.learned == false and isFavorSource(r.source) then
+            local qs = ns.QuestDB and ns.QuestDB.PatternSources(name)
+            if r.learned == false and (isFavorSource(r.source) or (qs and qs.favor)) then
                 local cost = r.source and (tonumber(r.source:match("Cost:%s*(%d+)")) or tonumber(r.source:match("(%d+)%s*Merchant's Favor")))
                 local link = r.item and select(2, C.GetItemInfo(r.item))
                 local cmp = link and ns.Gear.Compare(link)

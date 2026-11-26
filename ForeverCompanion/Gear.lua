@@ -380,6 +380,20 @@ end
 ----------------------------------------------------------------------
 local function equippedLink(slot) return GetInventoryItemLink("player", slot) end
 
+-- True for items you can only equip one of ("Unique", "Unique-Equipped").
+local uniqueCache = {}
+function G.IsUnique(link)
+    if not link then return false end
+    if uniqueCache[link] ~= nil then return uniqueCache[link] end
+    local lines, complete = C.TooltipLines(link)
+    local unique = false
+    for _, l in ipairs(lines) do
+        if l == (ITEM_UNIQUE or "Unique") or l:find("^Unique%-Equipped") or l:find("^Unique %(") then unique = true break end
+    end
+    if complete then uniqueCache[link] = unique end
+    return unique
+end
+
 -- Returns { delta, pct, slot, current = link or nil, note } or nil when the
 -- item isn't gear for this character.
 function G.Compare(link)
@@ -402,8 +416,18 @@ function G.Compare(link)
         if mhIs2H and (equipLoc == "INVTYPE_WEAPONOFFHAND" or equipLoc == "INVTYPE_SHIELD" or equipLoc == "INVTYPE_HOLDABLE") then
             return { delta = 0, note = "you use a two-hander" }
         end
+        -- Unique / Unique-Equipped: if you already wear one, the new copy can
+        -- only replace that one (not your other ring or trinket).
+        local forced
+        if #slots > 1 and G.IsUnique(link) then
+            local id = C.ItemID(link)
+            for _, s in ipairs(slots) do
+                local l = equippedLink(s)
+                if l and C.ItemID(l) == id then forced = s end
+            end
+        end
         for _, s in ipairs(slots) do
-            if not (s == 17 and equipLoc == "INVTYPE_WEAPON" and not canDualWield()) then
+            if (not forced or s == forced) and not (s == 17 and equipLoc == "INVTYPE_WEAPON" and not canDualWield()) then
                 local l = equippedLink(s)
                 local sc = G.Score(l, weights)
                 if not l then sc = 0 end
