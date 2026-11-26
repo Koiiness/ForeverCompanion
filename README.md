@@ -73,7 +73,7 @@ Download the ZIP again and replace the `ForeverCompanion` folder in your AddOns 
 
 1. In game, click **Leave a note** in the sidebar (or type `/fc note something looks off here`). Each note remembers which page you were on, your level and your zone.
 2. When you're ready to send, open **Settings → Data → Share notes and errors** (or type `/fc share`). A window opens with your notes and any recent addon errors, already selected.
-3. Press **Cmd+C** (Mac) or **Ctrl+C** (Windows), then paste it into Discord and send it to Koiiness.
+3. Press **Cmd+C** (Mac) or **Ctrl+C** (Windows), then paste it into Discord: in the guild channel for the addon, or as a direct message to its author.
 4. Back in the window, click **Clear notes I've sent** so you don't send the same ones twice.
 
 ## Troubleshooting
