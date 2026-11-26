@@ -60,6 +60,7 @@ local ICONS = {
     Talents = "Interface\\Icons\\Ability_Marksmanship",
     Quests = "Interface\\Icons\\INV_Misc_Note_01",
     Money = "Interface\\Icons\\INV_Misc_Coin_01",
+    Settings = "Interface\\Icons\\Trade_Engineering",
     Repair = "Interface\\Icons\\Trade_BlackSmithing",
     Coin = "Interface\\Icons\\INV_Misc_Coin_02",
     Quest = "Interface\\GossipFrame\\ActiveQuestIcon",
@@ -67,7 +68,7 @@ local ICONS = {
     Clock = "Interface\\Icons\\INV_Misc_PocketWatch_01",
     Trainer = "Interface\\Icons\\INV_Misc_Book_11",
 }
-local PAGE_ORDER = { "Overview", "Gear", "Bags", "Money", "Professions", "Talents", "Quests" }
+local PAGE_ORDER = { "Overview", "Gear", "Bags", "Money", "Professions", "Talents", "Quests", "Settings" }
 local PAGE_HINTS = {
     Overview = "Click a to-do item to jump to its page.",
     Gear = "Hover an item for full details. Shift-click to link it in chat.",
@@ -76,6 +77,7 @@ local PAGE_HINTS = {
     Talents = "Talents come from the game's own tree for your spec.",
     Quests = "Quest colors match the game: yellow gives the best XP for your level.",
     Money = "Covers every character you've logged in with this addon. Prices come from your AH scans.",
+    Settings = "Changes save right away.",
 }
 
 ----------------------------------------------------------------------
@@ -388,7 +390,7 @@ function P.Note(text, hex)
     place(w, w.text:GetStringHeight() + 6)
 end
 
-function P.Bar(label, value, max, hex)
+function P.Bar(label, value, max, hex, valueText)
     if sec.skipping then return end
     local w = acquire("bar", function()
         local f = CreateFrame("Frame", nil, content)
@@ -411,7 +413,7 @@ function P.Bar(label, value, max, hex)
     w.fill:SetColorTexture(r, g, b, 0.85)
     w.fill:SetWidth(math.max(1, (CONTENT_W) * pct))
     w.label:SetText(label)
-    w.value:SetText(string.format("%s / %s", value, max))
+    w.value:SetText(valueText or string.format("%s / %s", value, max))
     place(w, 26)
     y = y + 4
 end
@@ -513,9 +515,15 @@ pages.Overview = function()
         elseif shownQ < 3 then questRow(q) shownQ = shownQ + 1 nowCount = nowCount + 1 end
     end
     local shownD = 0
+    -- Play style: solo players see one dungeon (and a nudge to group up), groups see more.
+    local style = ns.db.settings.playStyle or "both"
+    local maxD = style == "solo" and 1 or (style == "group" and 3 or 2)
     for _, d in ipairs(plan.dungeons) do
         if d.when == "soon" then soonD[#soonD + 1] = d
-        elseif shownD < 2 then dungeonRow(d) shownD = shownD + 1 nowCount = nowCount + 1 end
+        elseif shownD < maxD then dungeonRow(d) shownD = shownD + 1 nowCount = nowCount + 1 end
+    end
+    if style == "solo" and shownD > 0 then
+        P.Note("Dungeons need a group: try the Group Finder or ask your guild.", GRAY)
     end
     if nowCount == 0 then P.Note("Nothing specific yet. Keep questing; this fills in as data loads.", GRAY) end
 
@@ -533,6 +541,14 @@ pages.Overview = function()
     P.Section("To do", "To do", 2)
     P.Header("Next steps")
     local n = 0
+    do
+        local reserve = ns.Gold.Reserve()
+        if GetMoney() < reserve then
+            P.Row({ icon = ICONS.Coin, title = color(RED, "Low on gold"), sub = "Keep " .. M(reserve) .. " for training and repairs; you have " .. M(GetMoney()) .. ". Sell or vendor before buying anything.",
+                    onClick = go("Money") })
+            n = n + 1
+        end
+    end
     local r = ns.Spec.Report()
     if r.unspent and r.unspent > 0 then
         local pick = ns.Spec.NextPick(r)
@@ -854,7 +870,7 @@ pages.Professions = function()
                 local gmp = ns.Mats.Plan(g.r, g.plan.value)
                 P.Row({ link = link, title = g.name, sub = why, sub2 = color(GRAY, "Get it: ") .. g.where,
                         sub3 = color(GRAY, "Materials: ") .. ns.Mats.Summary(gmp),
-                        right = g.cost and color(GOLD, g.cost) or nil })
+                        right = g.cost and (ns.Gold.Affordable(g.costCopper) and color(GOLD, g.cost) or color(RED, g.cost .. "  save up first")) or nil })
             end
         elseif not gathering then
             P.Note("Open your " .. p.name .. " window once so its recipes are recorded.", GOLD)
@@ -908,6 +924,45 @@ pages.Money = function()
     })
     if not next(ns.db.prices) and not TSM_API and not (Auctionator and Auctionator.API) then
         P.Note("No auction prices yet. Open the auction house once and a price scan runs by itself; this page fills in after that.", GOLD)
+    end
+
+    -- Safety net: gold to keep for training and repairs, and your savings goal.
+    do
+        local GO = ns.Gold
+        local money = GetMoney()
+        local reserve, parts = GO.Reserve()
+        local spendable = GO.Spendable()
+        P.Section("Safety", "Safety net", 0)
+        P.Header("Your gold safety net", "on this character")
+        P.Row({ icon = ICONS.Coin, title = "Spendable", sub = "What you can spend on crafting and the AH without touching your safety net",
+                right = color(spendable > 0 and GREEN or RED, M(spendable)) })
+        P.Row({ icon = ICONS.Repair, title = "Safety net", sub = "Kept aside for the things you'll need", right = M(reserve) })
+        for _, p in ipairs(parts) do
+            local note = p.known and "" or color(GRAY, (p.label:find("training") and "  (visit your class trainer once to see the real cost)" or "  (estimate until your next repair)"))
+            P.Row({ title = "      " .. p.label .. note, right = color(GRAY, M(p.amount)), indent = 24 })
+        end
+        local _, upcoming, known = GO.Training()
+        if known and #upcoming > 0 then
+            P.SubHeader("Coming up at your class trainer")
+            for i = 1, math.min(6, #upcoming) do
+                local s = upcoming[i]
+                P.Row({ title = s.name .. (s.rank and s.rank ~= "" and color(GRAY, "  " .. s.rank) or ""),
+                        sub = s.level <= UnitLevel("player") and color(GREEN, "you can learn this now") or ("at level " .. s.level),
+                        right = M(s.cost) })
+            end
+        end
+        local goal = GO.Goal()
+        if goal then
+            P.SubHeader("Saving for")
+            P.Bar(goal.name .. (goal.default and color(GRAY, "  (Classic price; /fc goal to change)") or ""), math.min(money, goal.amount), goal.amount,
+                money >= goal.amount and "4cff4c" or "ffd100", M(money) .. " / " .. M(goal.amount))
+            local rate, eta = GO.Rate(), GO.TimeTo(goal.amount)
+            local msg
+            if money >= goal.amount then msg = color(GREEN, "You can afford it now.")
+            elseif eta then msg = string.format("At this session's pace (%s per hour) you'll have it in about %s of play.", M(rate), ns.Duration(eta))
+            else msg = "Play a little longer this session and the addon will estimate how long it'll take." end
+            P.Note(msg, GRAY)
+        end
     end
 
     P.Section("Cash", "Cash in", 1)
@@ -982,6 +1037,93 @@ pages.Money = function()
                     sub2 = nextLine })
         end
     end
+end
+
+pages.Settings = function()
+    local s = ns.db.settings
+    local function set(key, value) return function() s[key] = value ns.RenderUI() end end
+    local function onOff(key, default)
+        local v = s[key]
+        if v == nil then v = default end
+        return v
+    end
+
+    P.Section("Play", "How you play", 1)
+    P.Header("How you play")
+    local style = s.playStyle or "both"
+    P.Choices("Leveling:", {
+        { label = "Mostly solo", active = style == "solo", onClick = set("playStyle", "solo") },
+        { label = "Mostly in groups", active = style == "group", onClick = set("playStyle", "group") },
+        { label = "Both", active = style == "both", onClick = set("playStyle", "both") },
+    })
+    P.Note("Solo: your plan shows one dungeon and flags group quests. Groups: more dungeons in your plan.", GRAY)
+    local spec, manual = ns:GetSpec()
+    P.Row({ icon = ICONS.Talents, title = "Spec for gear: " .. ns:SpecLabel(), sub = manual and "Chosen by you" or "Detected from your talents",
+            right = color(GRAY, "change"), onClick = go("Gear") })
+    P.Choices("Grinding:", {
+        { label = "Skip grinds", active = onOff("noGrind", true), onClick = set("noGrind", true) },
+        { label = "Show everything", active = not onOff("noGrind", true), onClick = set("noGrind", false) },
+    })
+
+    P.Section("Gold", "Gold", 2)
+    P.Header("Gold safety net")
+    local levels = s.reserveLevels or 4
+    P.Choices("Keep gold for training:", {
+        { label = "Next 2 levels", active = levels == 2, onClick = set("reserveLevels", 2) },
+        { label = "Next 4", active = levels == 4, onClick = set("reserveLevels", 4) },
+        { label = "Next 6", active = levels == 6, onClick = set("reserveLevels", 6) },
+    })
+    local goal = ns.Gold.Goal()
+    P.Choices("Savings goal:", {
+        { label = "Mount at 40", active = goal ~= nil and goal.default == true, onClick = function() ns.char.goal = nil ns.RenderUI() end },
+        { label = "None", active = goal == nil, onClick = function() ns.char.goal = false ns.RenderUI() end },
+    })
+    P.Note(((goal and not goal.default) and ("Custom goal: " .. goal.name .. ", " .. M(goal.amount) .. ".  ") or "")
+        .. "For your own goal type /fc goal <gold> <name>, e.g. /fc goal 50 Epic staff.", GRAY)
+    P.Choices("Sell gray items at vendors:", {
+        { label = "Automatically", active = onOff("autoSellJunk", false), onClick = set("autoSellJunk", true) },
+        { label = "I'll press the button", active = not onOff("autoSellJunk", false), onClick = set("autoSellJunk", false) },
+    })
+    P.Choices("Scan AH prices:", {
+        { label = "When I open the AH", active = onOff("autoScan", true), onClick = set("autoScan", true) },
+        { label = "Only when I ask", active = not onOff("autoScan", true), onClick = set("autoScan", false) },
+    })
+
+    P.Section("Alerts", "Alerts & display", 3)
+    P.Header("Alerts")
+    P.Choices("Upgrade and level-up cards:", {
+        { label = "On", active = onOff("celebrate", true), onClick = set("celebrate", true) },
+        { label = "Off", active = not onOff("celebrate", true), onClick = set("celebrate", false) },
+        { label = "Preview", active = false, onClick = function() SlashCmdList.FOREVERCOMPANION("testcard") end },
+    })
+    P.Choices("Card sound:", {
+        { label = "On", active = onOff("celebrateSound", true), onClick = set("celebrateSound", true) },
+        { label = "Off", active = not onOff("celebrateSound", true), onClick = set("celebrateSound", false) },
+    })
+    P.Choices("Advice on item tooltips:", {
+        { label = "On", active = onOff("tooltip", true), onClick = set("tooltip", true) },
+        { label = "Off", active = not onOff("tooltip", true), onClick = set("tooltip", false) },
+    })
+    P.Header("Display")
+    P.Choices("Touch mode (bigger window):", {
+        { label = "On", active = onOff("touch", false), onClick = function() ns:SetTouch(true) ns.RenderUI() end },
+        { label = "Off", active = not onOff("touch", false), onClick = function() ns:SetTouch(false) ns.RenderUI() end },
+    })
+    local mmShown = not (ns.db.minimap and ns.db.minimap.hide)
+    P.Choices("Minimap button:", {
+        { label = "Show", active = mmShown, onClick = function() ns:SetMinimapShown(true) ns.RenderUI() end },
+        { label = "Hide", active = not mmShown, onClick = function() ns:SetMinimapShown(false) ns.RenderUI() end },
+    })
+
+    P.Section("Data", "Data", 4)
+    P.Header("Saved data")
+    P.Note("Each character's bags, bank, gear and recipes are saved so pages can plan across characters. Prices, notes and settings are shared.", GRAY)
+    P.Row({ icon = ICONS.Bags, title = "Reset this character's data", sub = "Bags and gear refresh right away; open your bank and profession windows again.",
+            onClick = function() SlashCmdList.FOREVERCOMPANION("reset") end })
+    P.Row({ icon = ICONS.Bags, title = "Reset every character's data", sub = "Prices, notes and settings are kept.",
+            onClick = function() SlashCmdList.FOREVERCOMPANION("resetall") end })
+    P.Row({ icon = ICONS.Quest, title = "Show errors the addon caught", sub = "Also saved for troubleshooting",
+            onClick = function() SlashCmdList.FOREVERCOMPANION("errors") end })
 end
 
 pages.Talents = function()

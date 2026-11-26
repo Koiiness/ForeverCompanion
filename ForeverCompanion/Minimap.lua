@@ -107,6 +107,16 @@ ns:Listen("READY", function()
     end
 end)
 
+function ns:SetMinimapShown(show)
+    ns.db.minimap.hide = not show
+    if usingLib then
+        local DBIcon = LibStub("LibDBIcon-1.0", true)
+        if show then DBIcon:Show(ADDON) else DBIcon:Hide(ADDON) end
+    elseif button then
+        button:SetShown(show)
+    end
+end
+
 ns:Command("minimap", "show or hide the minimap button", function()
     ns.db.minimap.hide = not ns.db.minimap.hide
     if usingLib then

@@ -322,12 +322,12 @@ function PR.ToGet(profName, limit)
             local upgrade = a and a.cmp and not a.cmp.unusable and not a.cmp.partial and a.cmp.delta > 0.5
             local profit = plan.profit and plan.profit > 0 and plan.profit or nil
             if upgrade or profit then
-                local where, cost = {}, nil
+                local where, cost, costCopper = {}, nil, nil
                 local train = PR.TrainInfo(name, r.item, profName)
                 local qdHas = ns.QuestDB and ns.QuestDB.PatternSources(name)
                 if train and (train.fromTrainer or not qdHas) then
                     where[#where + 1] = PR.TrainText(train)
-                    if train.cost and train.cost > 0 then cost = ns.Money(train.cost) end
+                    if train.cost and train.cost > 0 then cost, costCopper = ns.Money(train.cost), train.cost end
                 end
                 if r.source and r.source ~= "" then where[#where + 1] = r.source end
                 local qdText = ns.QuestDB and ns.QuestDB.PatternSourceText(name)
@@ -337,7 +337,7 @@ function PR.ToGet(profName, limit)
                 local patternID, patternPrice = ns.Prices.PatternFor(name)
                 if patternPrice then
                     where[#where + 1] = "pattern on the AH ~" .. ns.Money(patternPrice)
-                    cost = cost or ("~" .. ns.Money(patternPrice))
+                    if not cost then cost, costCopper = "~" .. ns.Money(patternPrice), patternPrice end
                 end
                 local drop = ns.Research and ns.Research.PatternDrop(name)
                 if drop then
@@ -346,7 +346,7 @@ function PR.ToGet(profName, limit)
                 end
                 local gap = train and train.gap or 0
                 out[#out + 1] = { name = name, r = r, plan = plan, upgrade = upgrade, delta = upgrade and a.cmp.delta or 0,
-                                  profit = profit, where = #where > 0 and table.concat(where, "; ") or "source unknown", cost = cost, gap = gap }
+                                  profit = profit, where = #where > 0 and table.concat(where, "; ") or "source unknown", cost = cost, costCopper = costCopper, gap = gap }
             end
         end
     end

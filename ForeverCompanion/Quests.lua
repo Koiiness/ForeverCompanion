@@ -78,6 +78,10 @@ function Q.Triage()
             q.diff = Q.Difficulty(q.level)
             q.xp = C.QuestRewardXP(q.questID)
             q.advice = ADVICE[q.diff]
+            if (q.group or 0) > 1 and ns.db.settings.playStyle == "solo" then
+                q.advice = "group quest (" .. q.group .. " players): skip it or ask for help"
+                if q.diff == "yellow" or q.diff == "green" then q.diff = "orange" end
+            end
             if q.complete then
                 table.insert(out.complete, q)
                 out.completeXP = out.completeXP + (q.xp or 0)

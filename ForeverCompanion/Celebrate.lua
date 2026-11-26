@@ -14,6 +14,7 @@ local queue, card = {}, nil
 local function enabled() return ns.db and ns.db.settings.celebrate ~= false end
 
 local function playSound(kind)
+    if ns.db and ns.db.settings.celebrateSound == false then return end
     local id
     if SOUNDKIT then
         id = (kind == "level" and SOUNDKIT.UI_LEVEL_UP_GAIN) or SOUNDKIT.UI_EPICLOOT_TOAST or SOUNDKIT.UI_GARRISON_FOLLOWER_LEARN_TRAIT

@@ -195,10 +195,14 @@ function MA.Plan(r, sellValue)
     if #plan.mats == 0 then plan.effort = EFFORT.unknown end
     local v = VERDICT[plan.effort] or VERDICT[5]
     plan.verdict, plan.color = v[1], v[2]
-    -- Expensive: more than a quarter of your gold, or more than the item sells for.
-    local gold = GetMoney and GetMoney() or 0
-    if plan.spend > 0 and ((gold > 0 and plan.spend > gold * 0.25) or (sellValue and plan.spend > sellValue)) then
-        plan.expensive = true
+    -- Expensive: it would dip into your gold safety net, or costs more than the item sells for.
+    if plan.spend > 0 then
+        local ok, why = true, nil
+        if ns.Gold then ok, why = ns.Gold.Affordable(plan.spend) end
+        if not ok or (sellValue and plan.spend > sellValue) then
+            plan.expensive = true
+            plan.expensiveWhy = why or "costs more than it sells for"
+        end
     end
     return plan
 end
@@ -212,7 +216,7 @@ end
 function MA.Summary(plan)
     local text = "|cff" .. plan.color .. plan.verdict .. "|r"
     if plan.spend > 0 then text = text .. "|cff9a9a9a, spend ~" .. ns.Money(plan.spend) .. "|r" end
-    if plan.expensive then text = text .. " |cffff6060(expensive)|r" end
+    if plan.expensive then text = text .. " |cffff6060(" .. (plan.expensiveWhy or "expensive") .. ")|r" end
     return text
 end
 

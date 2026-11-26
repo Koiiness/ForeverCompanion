@@ -9,7 +9,8 @@ Built for the Forever client 1.60.1 (Interface 16001).
 - **Your plan.** The Overview page lists the quests to pick up, finish or turn in, and the dungeons to run, ranked by the upgrades they hold for your spec.
 - **Gear.** Scores items for your spec (Tank, Healer or DPS, detected from your talents), shows the stat changes behind every upgrade, accounts for set bonuses, and lists the best upgrade per slot from quests, dungeons, the auction house and crafting.
 - **Bags.** For every item: keep, sell to a vendor, disenchant (with the odds for each material) or put on the auction house. Consumables, profession tools and materials you use are kept. Handles Waylaid Crates and Merchant's Favor.
-- **Money.** A gold plan across all your characters: what each can cash in, unbound greens to mail to your enchanter, the most profitable recipes any of them knows, and the best-paying herbs, ore and leather each gatherer can farm.
+- **Money.** A gold plan across all your characters: what each can cash in, unbound greens to mail to your enchanter, the most profitable recipes any of them knows, and the best-paying herbs, ore and leather each gatherer can farm. A **safety net** keeps gold aside for upcoming class training and repairs, tracks a savings goal (a mount at 40 by default), and never suggests spending what you need.
+- **Settings.** Solo or group leveling, how much gold to keep aside, your savings goal, celebrations and sound, tooltips, touch mode, the minimap button, and resetting saved data.
 - **Professions.** Skill-up recipes with materials you have or still need, what to do with the result, money makers, and recipes worth getting with where to get them.
 - **Talents.** The best next talent from a Forever leveling build (Discipline Priest so far; more specs can be added in `Data.lua`).
 - **Quests.** XP per hour, time to level, a quest log sorted by difficulty, and zones for your level.

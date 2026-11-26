@@ -9,6 +9,8 @@ local DEFAULTS = {
         autoScan = true,       -- full AH price scan when the AH opens (once per 15 min)
         touch = false,         -- bigger window for touch screens
         noGrind = true,        -- hide money ideas that need grinding far below your level
+        playStyle = "both",    -- "solo", "group" or "both": how dungeons and group quests are weighed
+        reserveLevels = 4,     -- levels of class training to keep gold for
         ahCutPct = 5,          -- auction house cut, percent
         ahMinGain = 1000,      -- copper: AH must beat the next option by this much to be worth listing
         specOverride = nil,    -- spec name from Data.Specs, e.g. "Shadow"; nil = detect from talents
