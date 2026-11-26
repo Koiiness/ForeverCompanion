@@ -155,9 +155,9 @@ function P.Header(text, right)
     local w = acquire("header", function()
         local f = CreateFrame("Frame", nil, content)
         f.text = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-        f.text:SetPoint("BOTTOMLEFT", 2, 6)
-        f.right = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        f.right:SetPoint("BOTTOMRIGHT", -4, 7)
+        f.text:SetPoint("TOPLEFT", 2, -6)
+        f.text:SetJustifyH("LEFT")
+        f.right = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         f.line = f:CreateTexture(nil, "ARTWORK")
         f.line:SetColorTexture(ACCENT[1], ACCENT[2], ACCENT[3], 0.35)
         f.line:SetHeight(1)
@@ -168,7 +168,16 @@ function P.Header(text, right)
     if y > 0 then y = y + 10 end
     w.text:SetText(text)
     w.right:SetText(right or "")
-    place(w, 30)
+    w.right:ClearAllPoints()
+    local h = 30
+    -- If the title and the right-hand text would collide, put the right text underneath.
+    if right and right ~= "" and w.text:GetStringWidth() + w.right:GetStringWidth() + 24 > CONTENT_W then
+        w.right:SetPoint("TOPLEFT", w.text, "BOTTOMLEFT", 0, -3)
+        h = 46
+    else
+        w.right:SetPoint("TOPRIGHT", -4, -9)
+    end
+    place(w, h)
     y = y + 4
 end
 
@@ -205,7 +214,10 @@ function P.Tiles(tiles)
             f.label:SetJustifyH("LEFT")
             return f
         end)
+        w.value:SetFontObject("GameFontHighlightLarge")
         w.value:SetText(t[3] and color(t[3], t[1]) or t[1])
+        -- Long values (e.g. a spec name) drop to a smaller font instead of being cut off.
+        if w.value:GetStringWidth() > tw - 18 then w.value:SetFontObject("GameFontHighlight") end
         w.label:SetText(t[2])
         w:SetPoint("TOPLEFT", content, "TOPLEFT", (i - 1) * (tw + gap), -y)
         w:SetSize(tw, 54)
@@ -230,20 +242,23 @@ function P.Row(opts)
         f.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
         f.title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         f.title:SetJustifyH("LEFT")
-        f.title:SetWordWrap(false)
+        f.title:SetWordWrap(true)
+        if f.title.SetMaxLines then f.title:SetMaxLines(2) end
         f.sub = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         f.sub:SetJustifyH("LEFT")
-        f.sub:SetWordWrap(false)
+        f.sub:SetWordWrap(true)
+        if f.sub.SetMaxLines then f.sub:SetMaxLines(3) end
         f.sub2 = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         f.sub2:SetJustifyH("LEFT")
-        f.sub2:SetWordWrap(false)
+        f.sub2:SetWordWrap(true)
+        if f.sub2.SetMaxLines then f.sub2:SetMaxLines(3) end
         f.sub3 = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         f.sub3:SetJustifyH("LEFT")
-        f.sub3:SetWordWrap(false)
+        f.sub3:SetWordWrap(true)
+        if f.sub3.SetMaxLines then f.sub3:SetMaxLines(3) end
         f.right = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         f.right:SetJustifyH("RIGHT")
-        f.right:SetPoint("RIGHT", -10, 0)
-        f.right:SetWidth(170)
+        f.right:SetWordWrap(false)
         f.arrow = f:CreateFontString(nil, "OVERLAY", "GameFontDisable")
         f.arrow:SetPoint("RIGHT", -4, 0)
         f.arrow:SetText(">")
@@ -277,77 +292,72 @@ function P.Row(opts)
     local icon = opts.icon or (opts.link and itemIcon(opts.link))
     local x = 10
     if icon then
-        w.icon:SetTexture(icon) w.icon:Show() x = 42
+        w.icon:SetTexture(icon) w.icon:Show() x = 44
     else
         w.icon:Hide()
     end
-    if opts.sub3 and not opts.sub2 then opts.sub2, opts.sub3 = opts.sub3, nil end
-    local h = opts.sub3 and 66 or (opts.sub2 and 52 or (opts.sub and 38 or 26))
-    w.sub3:ClearAllPoints()
-    if opts.sub3 then
-        w.sub3:SetPoint("TOPLEFT", w.sub2, "BOTTOMLEFT", 0, -3)
-        w.sub3:SetText(opts.sub3)
-        w.sub3:SetWidth(CONTENT_W - x - 14 - (opts.indent or 0))
-        w.sub3:Show()
-    else
-        w.sub3:Hide()
-    end
-    w.title:ClearAllPoints()
-    w.sub:ClearAllPoints()
-    w.sub2:ClearAllPoints()
-    if opts.sub2 then
-        w.sub2:SetPoint("TOPLEFT", w.sub, "BOTTOMLEFT", 0, -3)
-        w.sub2:SetText(opts.sub2)
-        w.sub2:SetWidth(CONTENT_W - x - 190 - (opts.indent or 0))
-        w.sub2:Show()
-    else
-        w.sub2:Hide()
-    end
-    if opts.sub then
-        w.title:SetPoint("TOPLEFT", x, -5)
-        w.sub:SetPoint("TOPLEFT", w.title, "BOTTOMLEFT", 0, -3)
-        w.sub:SetText(opts.sub)
-        w.sub:SetWidth(CONTENT_W - x - 190 - (opts.indent or 0))
-        w.sub:Show()
-    else
-        w.title:SetPoint("LEFT", x, 0)
-        w.sub:Hide()
-    end
-    w.title:SetText(opts.title or (opts.link or ""))
-    w.title:SetWidth(CONTENT_W - x - 190 - (opts.indent or 0))
-    w.right:SetText(opts.right or "")
+    -- Text wraps instead of trailing off; the row grows to fit.
+    local indent = opts.indent or 0
+    local rowW = CONTENT_W - indent
+    local rightPad = opts.onClick and 22 or 10
     w.right:ClearAllPoints()
-    if opts.sub2 or opts.sub3 then
-        -- Value sits on the title line so the two detail lines can use the full width.
-        w.right:SetPoint("TOPRIGHT", opts.onClick and -20 or -10, -5)
-        w.sub:SetWidth(CONTENT_W - x - 14 - (opts.indent or 0))
-        w.sub2:SetWidth(CONTENT_W - x - 14 - (opts.indent or 0))
-    else
-        w.right:SetPoint("RIGHT", opts.onClick and -20 or -10, 0)
+    w.right:SetText(opts.right or "")
+    local rightW = opts.right and math.min(200, w.right:GetStringWidth() + 4) or 0
+    w.right:SetWidth(math.max(rightW, 1))
+    w.right:SetPoint("TOPRIGHT", -rightPad, -7)
+    local textW = rowW - x - rightPad - 6
+    local titleW = textW - (rightW > 0 and (rightW + 10) or 0)
+
+    w.title:ClearAllPoints()
+    w.title:SetPoint("TOPLEFT", x, -7)
+    w.title:SetWidth(titleW)
+    w.title:SetText(opts.title or (opts.link or ""))
+    local h = 7 + w.title:GetStringHeight()
+    local prev = w.title
+    for _, key in ipairs({ "sub", "sub2", "sub3" }) do
+        local fs, text = w[key], opts[key]
+        fs:ClearAllPoints()
+        if text and text ~= "" then
+            fs:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -3)
+            fs:SetWidth(textW)
+            fs:SetText(text)
+            fs:Show()
+            h = h + 3 + fs:GetStringHeight()
+            prev = fs
+        else
+            fs:Hide()
+        end
     end
+    h = math.max(h + 8, icon and 42 or 30)
     w.arrow:SetShown(opts.onClick ~= nil)
-    place(w, h, opts.indent)
+    place(w, h, indent)
     y = y + 2
 end
+
 
 -- A label followed by toggle buttons: { { label, active, onClick } ... }
 function P.Choices(label, choices)
     if sec.skipping then return end
-    local holder = acquire("choiceLabel", function()
-        local f = CreateFrame("Frame", nil, content)
-        f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        f.text:SetPoint("LEFT", 2, 0)
-        return f
-    end)
-    holder.text:SetText(label)
-    holder:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
-    holder:SetSize(100, 24)
-    local x, rowY = 100, y
+    -- The label sits on its own line so long labels never run into the buttons.
+    if label and label ~= "" then
+        local holder = acquire("choiceLabel", function()
+            local f = CreateFrame("Frame", nil, content)
+            f.text = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            f.text:SetPoint("BOTTOMLEFT", 2, 3)
+            f.text:SetJustifyH("LEFT")
+            return f
+        end)
+        holder.text:SetText((label:gsub(":$", "")))
+        holder:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+        holder:SetSize(CONTENT_W, 20)
+        y = y + 22
+    end
+    local x, rowY = 0, y
     for _, ch in ipairs(choices) do
         local b = acquire("choice", function()
             local f = CreateFrame("Button", nil, content, "BackdropTemplate")
             f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-            f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             f.text:SetPoint("CENTER")
             local hl = f:CreateTexture(nil, "HIGHLIGHT")
             hl:SetAllPoints()
@@ -357,10 +367,10 @@ function P.Choices(label, choices)
             return f
         end)
         b.text:SetText(ch.label)
-        local w = b.text:GetStringWidth() + 20
-        if x + w > CONTENT_W then x, rowY = 100, rowY + 28 end
+        local w = math.max(64, b.text:GetStringWidth() + 28)
+        if x + w > CONTENT_W and x > 0 then x, rowY = 0, rowY + 36 end
         b:SetPoint("TOPLEFT", content, "TOPLEFT", x, -rowY)
-        b:SetSize(w, 24)
+        b:SetSize(w, 30)
         if ch.active then
             b:SetBackdropColor(ACCENT[1], ACCENT[2], ACCENT[3], 0.35)
             b:SetBackdropBorderColor(ACCENT[1], ACCENT[2], ACCENT[3], 0.9)
@@ -369,10 +379,11 @@ function P.Choices(label, choices)
             b:SetBackdropBorderColor(1, 1, 1, 0.15)
         end
         b.fn = ch.onClick
-        x = x + w + 6
+        x = x + w + 8
     end
-    y = rowY + 32
+    y = rowY + 40
 end
+
 
 function P.Note(text, hex)
     if sec.skipping then return end
