@@ -467,11 +467,18 @@ function R.Plan()
         for _, f in ipairs(finds.dungeon) do
             local s = f.source
             local key = s.instance or "?"
-            -- Skip dungeons far above you; raids only at 55+.
-            local tooHigh = s.lo and s.lo > level + 3
-            if not tooHigh and not (s.raid and level < 55) then
+            -- When it fits: now (in range or a quick run below you), soon (within
+            -- 6 levels), or not at all. Raids only from level 55.
+            local when, inLevels, below = "now", nil, false
+            if s.lo and level < s.lo - 1 then when, inLevels = "soon", s.lo - level end
+            if s.hi and level > s.hi + 4 then below = true end
+            local skip = (inLevels and inLevels > 6) or (s.raid and level < 55)
+            if not skip then
                 local d = dungeons[key]
-                if not d then d = { name = key, lo = s.lo, hi = s.hi, items = {}, score = 0 } dungeons[key] = d end
+                if not d then
+                    d = { name = key, lo = s.lo, hi = s.hi, items = {}, score = 0, when = when, inLevels = inLevels, below = below }
+                    dungeons[key] = d
+                end
                 local k = key .. ":" .. f.id
                 if not seenItem[k] then
                     seenItem[k] = true
@@ -485,8 +492,10 @@ function R.Plan()
             local key = f.source.quest or "?"
             local q = quests[key]
             if not q then
+                local req = f.source.req
                 q = { name = key, items = {}, score = 0, complete = f.source.complete, pickup = f.source.pickup,
-                      starter = f.source.starter, zone = f.source.zone, needs = f.source.needs, req = f.source.req }
+                      starter = f.source.starter, zone = f.source.zone, needs = f.source.needs, req = req,
+                      when = (req and req > level) and "soon" or "now", inLevels = (req and req > level) and (req - level) or nil }
                 quests[key] = q
             end
             local k = key .. ":" .. f.id

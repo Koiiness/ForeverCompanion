@@ -361,44 +361,99 @@ pages.Overview = function()
         { M(totals.AH + totals.DE + totals.VENDOR), "Bag items you can cash in", GREEN },
     })
 
-    -- Your plan: the quests and dungeons that upgrade you most.
+    -- Your plan: what to do now at your level, then what's coming up.
     local plan = ns.Research.Plan()
-    if #plan.quests > 0 or #plan.dungeons > 0 then
-        P.Header("Your plan", "where your next upgrades are")
-        for i = 1, math.min(4, #plan.quests) do
-            local q = plan.quests[i]
-            local parts = {}
-            for j = 1, math.min(2, #q.items) do
-                local it = q.items[j]
-                parts[#parts + 1] = (it.f.link or "?") .. " for " .. (D.SlotNames[it.slot] or "?")
-                    .. color(GREEN, string.format(" +%.1f", it.f.cmp.delta)) .. (it.choice and color(GRAY, " (choose it)") or "")
-            end
-            local verb = q.pickup and "Pick up " or (q.complete and "Turn in " or "Finish ")
-            local where = q.pickup and ((q.starter and (" from " .. q.starter) or "") .. (q.zone and (" in " .. q.zone) or "")) or ""
-            local extra = ""
-            if q.needs then extra = color("ff8040", "  (do " .. q.needs .. " first)") end
-            if q.req and q.req > UnitLevel("player") then extra = extra .. color("ff8040", "  (level " .. q.req .. ")") end
-            P.Row({ icon = ICONS.Quest, title = verb .. color(GOLD, q.name) .. color(GRAY, where) .. extra,
-                    sub = "Reward: " .. table.concat(parts, ", "), onClick = go("Quests"),
-                    right = q.complete and color(GREEN, "ready") or (q.pickup and color(BLUE, "not in your log") or nil) })
+    local tri = ns.Quests.Triage()
+    local QD = ns.QuestDB
+    local xpLeft = level < maxLevel and (s.max - s.xp) or nil
+    P.Header("Your plan", xpLeft and string.format("level %d  ·  %d XP to %d", level, xpLeft, level + 1) or ("level " .. level))
+
+    local function upgradeList(items, n)
+        local parts = {}
+        for j = 1, math.min(n, #items) do
+            local it = items[j]
+            parts[#parts + 1] = (D.SlotNames[it.slot] or "?") .. color(GREEN, string.format(" +%.1f", it.f.cmp.delta))
+                .. ((it.f.source.rate and it.f.source.kind == "dungeon") and color(GRAY, " " .. ns.Research.FormatRate(it.f.source.rate)) or "")
         end
-        for i = 1, math.min(3, #plan.dungeons) do
-            local d = plan.dungeons[i]
-            local parts = {}
-            for j = 1, math.min(3, #d.items) do
-                local it = d.items[j]
-                parts[#parts + 1] = (D.SlotNames[it.slot] or "?") .. color(GREEN, string.format(" +%.1f", it.f.cmp.delta))
-                    .. (it.f.source.rate and color(GRAY, " " .. ns.Research.FormatRate(it.f.source.rate)) or "")
-            end
-            local lv = (d.lo and d.hi) and string.format("levels %d-%d", d.lo, d.hi) or nil
-            P.Row({ icon = ICONS.Zone, title = "Run " .. color(GOLD, d.name) .. (lv and color(GRAY, "  ·  " .. lv) or ""),
-                    sub = string.format("%d upgrade%s: ", #d.items, #d.items > 1 and "s" or "") .. table.concat(parts, ", "),
-                    onClick = go("Gear") })
+        return table.concat(parts, ", ")
+    end
+    local function questRow(q)
+        local verb = q.pickup and "Pick up " or (q.complete and "Turn in " or "Finish ")
+        local where = q.pickup and ((q.starter and (" from " .. q.starter) or "") .. (q.zone and (" in " .. q.zone) or "")) or ""
+        local parts = {}
+        for j = 1, math.min(2, #q.items) do
+            local it = q.items[j]
+            parts[#parts + 1] = (it.f.link or "?") .. color(GREEN, string.format(" +%.1f", it.f.cmp.delta)) .. (it.choice and color(GRAY, " (choose it)") or "")
         end
-        if not ns.Research.HasAtlasLoot() then
-            P.Note("Install AtlasLoot Classic Forever to see dungeon drops here.", GRAY)
+        P.Row({ icon = ICONS.Quest, title = verb .. color(GOLD, q.name) .. color(GRAY, where)
+                    .. (q.needs and color("ff8040", "  (do " .. q.needs .. " first)") or ""),
+                sub = "Upgrade reward: " .. table.concat(parts, ", "), onClick = go("Quests"),
+                right = q.when == "soon" and color(GRAY, "at level " .. (q.req or "?")) or (q.complete and color(GREEN, "ready") or nil) })
+    end
+    local function dungeonRow(d)
+        local lv = (d.lo and d.hi) and string.format("levels %d-%d", d.lo, d.hi) or nil
+        local note = d.below and color(GRAY, "  ·  below your level, quick run") or ""
+        P.Row({ icon = ICONS.Zone, title = "Run " .. color(GOLD, d.name) .. (lv and color(GRAY, "  ·  " .. lv) or "") .. note,
+                sub = string.format("%d upgrade%s: ", #d.items, #d.items > 1 and "s" or "") .. upgradeList(d.items, 3),
+                right = d.when == "soon" and color(GRAY, "in " .. d.inLevels .. " level" .. (d.inLevels > 1 and "s" or "")) or nil,
+                onClick = go("Gear") })
+    end
+
+    P.SubHeader("Now")
+    local nowCount = 0
+    -- 1. Turn in finished quests: free XP.
+    if #tri.complete > 0 then
+        local names = {}
+        for i = 1, math.min(3, #tri.complete) do names[#names + 1] = tri.complete[i].title end
+        P.Row({ icon = ICONS.Quest, title = string.format("Turn in %d finished quest%s", #tri.complete, #tri.complete > 1 and "s" or ""),
+                sub = table.concat(names, ", ") .. (#tri.complete > 3 and ", ..." or ""),
+                right = tri.completeXP > 0 and color(GREEN, string.format("%d XP%s", tri.completeXP,
+                    xpLeft and tri.completeXP >= xpLeft and "  (levels you!)" or "")) or nil, onClick = go("Quests") })
+        nowCount = nowCount + 1
+    end
+    -- 2. Where to quest for XP right now.
+    if QD and QD.zones and #QD.zones > 0 then
+        for i = 1, math.min(2, #QD.zones) do
+            local z = QD.zones[i]
+            local ok, names = pcall(QD.SampleNames, z, 3)
+            P.Row({ icon = ICONS.Zone, title = "Quest in " .. color(GOLD, z.name),
+                    sub = string.format("%d quests at your level you haven't done", z.count) .. (ok and (": " .. table.concat(names, ", ")) or ""),
+                    onClick = go("Quests") })
+            nowCount = nowCount + 1
+        end
+    elseif #tri.active > 0 then
+        local good = 0
+        for _, q in ipairs(tri.active) do if q.diff == "yellow" or q.diff == "orange" or q.diff == "green" then good = good + 1 end end
+        if good > 0 then
+            P.Row({ icon = ICONS.Quest, title = string.format("Work on the %d quest%s in your log at your level", good, good > 1 and "s" or ""),
+                    sub = "Yellow and orange give the most XP", onClick = go("Quests") })
+            nowCount = nowCount + 1
         end
     end
+    -- 3. Quests with upgrade rewards you can do now, then dungeons in range.
+    local soonQ, soonD = {}, {}
+    local shownQ = 0
+    for _, q in ipairs(plan.quests) do
+        if q.when == "soon" then soonQ[#soonQ + 1] = q
+        elseif shownQ < 3 then questRow(q) shownQ = shownQ + 1 nowCount = nowCount + 1 end
+    end
+    local shownD = 0
+    for _, d in ipairs(plan.dungeons) do
+        if d.when == "soon" then soonD[#soonD + 1] = d
+        elseif shownD < 2 then dungeonRow(d) shownD = shownD + 1 nowCount = nowCount + 1 end
+    end
+    if nowCount == 0 then P.Note("Nothing specific yet. Keep questing; this fills in as data loads.", GRAY) end
+
+    if #soonQ > 0 or #soonD > 0 then
+        P.SubHeader("Coming up")
+        for i = 1, math.min(2, #soonQ) do questRow(soonQ[i]) end
+        table.sort(soonD, function(a, b) return (a.inLevels or 0) < (b.inLevels or 0) end)
+        for i = 1, math.min(2, #soonD) do dungeonRow(soonD[i]) end
+    end
+    local missing = {}
+    if not ns.Research.HasAtlasLoot() then missing[#missing + 1] = "AtlasLoot Classic Forever (dungeon drops)" end
+    if not (QD and QD.Has()) then missing[#missing + 1] = "Questie (quests and questing zones)" end
+    if #missing > 0 then P.Note("Install " .. table.concat(missing, " and ") .. " for a fuller plan.", GRAY) end
 
     P.Header("Next steps")
     local n = 0
@@ -417,12 +472,6 @@ pages.Overview = function()
         n = n + 1
     end
     local t = ns.Quests.Triage()
-    if #t.complete > 0 then
-        P.Row({ icon = ICONS.Quest, title = string.format("Turn in %d finished quest%s", #t.complete, #t.complete > 1 and "s" or ""),
-                sub = string.format("%.0f%% of a level", s.max > 0 and t.completeXP / s.max * 100 or 0),
-                right = t.completeXP > 0 and (t.completeXP .. " XP") or nil, onClick = go("Quests") })
-        n = n + 1
-    end
     for _, p in ipairs(c.professions or {}) do
         local hint = ns.Professions.TrainerHint(p)
         if hint and hint:find("^Visit") then

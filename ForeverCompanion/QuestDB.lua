@@ -127,11 +127,89 @@ function QD.StartScan()
 end
 
 -- Start a little after login; rescan when you level up or finish a quest.
-ns:Listen("READY", function() C_Timer.After(10, QD.StartScan) end)
+----------------------------------------------------------------------
+-- Questing zones: quests you can take at your level that you haven't done,
+-- grouped by zone, so the plan can say "Quest in Desolace: 14 quests".
+----------------------------------------------------------------------
+QD.zones = nil    -- list of { name, count, quests = { id... } }, most quests first
+local zoneScanning = false
+
+function QD.StartZoneScan()
+    if zoneScanning or QD.zones or not QD.Has() then return end
+    local L = _G.LibQuestieDB
+    local Q, N = L.Quest, L.Npc
+    local ok, ids = pcall(Q.GetAllIds)
+    if not ok or type(ids) ~= "table" then return end
+    zoneScanning = true
+    local level = UnitLevel("player")
+    local faction = UnitFactionGroup("player")
+    local myFaction = faction == "Horde" and "H" or "A"
+    local cm, rm = masks()
+    local byZone, i = {}, 0
+    local ticker
+    ticker = C_Timer.NewTicker(0.05, function()
+        if InCombatLockdown() then return end
+        local n = 0
+        while i < #ids and n < 300 do
+            i, n = i + 1, n + 1
+            local q = ids[i]
+            pcall(function()
+                local ql, req = Q.questLevel(q), Q.requiredLevel(q) or 0
+                -- Worth doing now: not gray, not more than 3 levels above you.
+                if ql and ql > 0 and ql >= level - 3 and ql <= level + 3 and req <= level and QD.Available(q, cm, rm) then
+                    local inLog = C_QuestLog and C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetLogIndexForQuestID(q)
+                    if not inLog then
+                        local starters = Q.startedBy(q)
+                        local npc = starters and starters[1] and starters[1][1]
+                        -- Skip quests given by NPCs hostile to your faction.
+                        local friendly = not npc or not N.friendlyToFaction or (N.friendlyToFaction(npc) or "AH"):find(myFaction, 1, true)
+                        local zone = (npc and N.zoneID(npc)) or Q.zoneOrSort(q)
+                        if friendly and zone and zone > 0 then
+                            local z = byZone[zone]
+                            if not z then z = { area = zone, quests = {} } byZone[zone] = z end
+                            z.quests[#z.quests + 1] = q
+                        end
+                    end
+                end
+            end)
+        end
+        if i >= #ids then
+            ticker:Cancel()
+            zoneScanning = false
+            local list = {}
+            for area, z in pairs(byZone) do
+                z.name = areaName(area) or ("Zone " .. area)
+                z.count = #z.quests
+                list[#list + 1] = z
+            end
+            table.sort(list, function(a, b)
+                if a.count ~= b.count then return a.count > b.count end
+                return a.name < b.name
+            end)
+            QD.zones = list
+            if ns.RefreshUI then ns.RefreshUI() end
+        end
+    end)
+end
+
+-- A few quest names from a zone, for the plan.
+function QD.SampleNames(zone, max)
+    local Q = _G.LibQuestieDB.Quest
+    local out = {}
+    for i = 1, math.min(max or 3, #zone.quests) do out[#out + 1] = Q.name(zone.quests[i]) or "?" end
+    return out
+end
+
+ns:Listen("READY", function()
+    C_Timer.After(10, QD.StartScan)
+    C_Timer.After(20, QD.StartZoneScan)
+end)
 ns:On("PLAYER_LEVEL_UP", function()
     QD.rewards = nil
+    QD.zones = nil
     wipe(infoCache)
     C_Timer.After(5, QD.StartScan)
+    C_Timer.After(15, QD.StartZoneScan)
 end)
 ns:On("QUEST_TURNED_IN", function() wipe(infoCache) end)
 ns:On("QUEST_ACCEPTED", function() wipe(infoCache) end)
