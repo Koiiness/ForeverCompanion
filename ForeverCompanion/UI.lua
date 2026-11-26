@@ -737,11 +737,12 @@ pages.Professions = function()
         if not r then return end
         local plan = PR.Plan(r)
         local short, long = PR.Verdict(plan)
+        local mp = ns.Mats.Plan(r, plan.value)
         local link = r.item and select(2, ns.C.GetItemInfo(r.item))
         local make = plan.canMake and color(GREEN, "  ·  can make now") or color("ff8080", "  ·  missing materials")
         P.Row({ link = link, icon = (not link) and ICONS.Professions or nil,
                 title = color(PR.DiffColor[r.diff] or "ffffff", name) .. (chance and color(GRAY, "  ·  " .. chance) or "") .. make,
-                sub = PR.MatsLine(r), sub2 = color(GRAY, "Then: ") .. long, right = short })
+                sub = ns.Mats.Line(mp), sub2 = ns.Mats.Summary(mp) .. color(GRAY, "   ·   Then: ") .. long, right = short })
     end
 
     for _, p in ipairs(profs) do
@@ -779,7 +780,9 @@ pages.Professions = function()
                     why = color(GREEN, "Profit ~" .. M(g.profit) .. " each") .. color(GRAY, " (sells for more than its materials)")
                 end
                 local link = select(2, ns.C.GetItemInfo(g.r.item))
+                local gmp = ns.Mats.Plan(g.r, g.plan.value)
                 P.Row({ link = link, title = g.name, sub = why, sub2 = color(GRAY, "Get it: ") .. g.where,
+                        sub3 = color(GRAY, "Materials: ") .. ns.Mats.Summary(gmp),
                         right = g.cost and color(GOLD, g.cost) or nil })
             end
         elseif not gathering then
@@ -872,8 +875,9 @@ pages.Money = function()
         local cr = plan.crafts[i]
         local link = select(2, ns.C.GetItemInfo(cr.item))
         P.Row({ link = link, title = color(GOLD, cr.recipe) .. color(GRAY, "  ·  " .. cr.who .. ", " .. cr.prof),
-                sub = string.format("Sells for ~%s after the AH cut; materials ~%s%s", M(cr.value), M(cr.cost),
-                    cr.estimated and color(GRAY, " (some at vendor price)") or ""),
+                sub = cr.mp and ns.Mats.Line(cr.mp) or nil,
+                sub2 = (cr.mp and (ns.Mats.Summary(cr.mp) .. color(GRAY, "   ·   ")) or "")
+                    .. string.format("sells ~%s after the AH cut, materials worth ~%s", M(cr.value), M(cr.cost)),
                 right = color(GREEN, "+" .. M(cr.profit)) })
     end
 

@@ -104,8 +104,16 @@ function MO.Plan()
                         end
                         local value = market * cut()
                         if cost and value - cost > 0 then
+                            -- How you'd get the materials, and what that costs in gold and time.
+                            local mp = ns.Mats and ns.Mats.Plan(r, value)
+                            local factor = 1
+                            if mp then
+                                factor = ({ [0] = 1.1, [1] = 1, [2] = 1, [3] = 0.95, [4] = 0.85, [5] = 0.6, [6] = 0.35 })[mp.effort] or 1
+                                if mp.expensive then factor = factor * 0.7 end
+                            end
                             plan.crafts[#plan.crafts + 1] = { who = row.label, prof = prof, recipe = name, item = r.item,
-                                                              value = value, cost = cost, profit = value - cost, estimated = estimated }
+                                                              value = value, cost = cost, profit = value - cost, estimated = estimated,
+                                                              mp = mp, score = (value - cost) * factor }
                         end
                     end
                 end
@@ -134,7 +142,8 @@ function MO.Plan()
     table.sort(plan.chars, function(a, b) return a.total > b.total end)
     table.sort(plan.mail, function(a, b) return a.mailDE > b.mailDE end)
     -- Keep the best version of each recipe (several characters may know it).
-    table.sort(plan.crafts, function(a, b) return a.profit > b.profit end)
+    -- Best first, counting effort: grinding or pricey materials push a recipe down.
+    table.sort(plan.crafts, function(a, b) return (a.score or a.profit) > (b.score or b.profit) end)
     local seen, crafts = {}, {}
     for _, cr in ipairs(plan.crafts) do
         if not seen[cr.recipe] then seen[cr.recipe] = true crafts[#crafts + 1] = cr end
