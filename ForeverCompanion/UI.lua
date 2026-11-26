@@ -123,9 +123,33 @@ end
 ----------------------------------------------------------------------
 local P = {}
 
-function P.Gap(h) y = y + (h or 8) end
+----------------------------------------------------------------------
+-- Sections: each page splits into tabs (P.Section). Only the selected
+-- section is drawn, so pages stay short. The tab bar is drawn where the
+-- first section starts, after the page has listed all its sections.
+----------------------------------------------------------------------
+local sectionState = {}   -- page name -> selected section name
+local sec = {}
+local function resetSections() sec = { list = {}, skipping = false, found = false, tabsY = nil } end
+resetSections()
+
+-- name: section key; label: tab text (defaults to name); order: tab position (lower first).
+function P.Section(name, label, order)
+    if not sec.tabsY then
+        sec.tabsY = y
+        y = y + 40
+    end
+    local seen = false
+    for _, s in ipairs(sec.list) do if s.name == name then seen = true break end end
+    if not seen then sec.list[#sec.list + 1] = { name = name, label = label or name, order = order or (#sec.list + 1) } end
+    sec.skipping = sectionState[current] ~= name
+    if not sec.skipping then sec.found = true end
+end
+
+function P.Gap(h) if not sec.skipping then y = y + (h or 8) end end
 
 function P.Header(text, right)
+    if sec.skipping then return end
     local w = acquire("header", function()
         local f = CreateFrame("Frame", nil, content)
         f.text = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -148,6 +172,7 @@ end
 
 -- A smaller heading inside a section.
 function P.SubHeader(text)
+    if sec.skipping then return end
     local w = acquire("subheader", function()
         local f = CreateFrame("Frame", nil, content)
         f.text = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -160,6 +185,7 @@ end
 
 -- tiles: { { value, label, hex color } ... }
 function P.Tiles(tiles)
+    if sec.skipping then return end
     local n = #tiles
     local gap = 8
     local tw = (CONTENT_W - gap * (n - 1)) / n
@@ -188,6 +214,7 @@ end
 -- opts: { icon, link, title, sub, right, onClick, tip }
 local rowIndex = 0
 function P.Row(opts)
+    if sec.skipping then return end
     local w = acquire("row", function()
         local f = CreateFrame("Button", nil, content)
         f.bg = f:CreateTexture(nil, "BACKGROUND")
@@ -303,6 +330,7 @@ end
 
 -- A label followed by toggle buttons: { { label, active, onClick } ... }
 function P.Choices(label, choices)
+    if sec.skipping then return end
     local holder = acquire("choiceLabel", function()
         local f = CreateFrame("Frame", nil, content)
         f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -345,6 +373,7 @@ function P.Choices(label, choices)
 end
 
 function P.Note(text, hex)
+    if sec.skipping then return end
     local w = acquire("note", function()
         local f = CreateFrame("Frame", nil, content)
         f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -360,6 +389,7 @@ function P.Note(text, hex)
 end
 
 function P.Bar(label, value, max, hex)
+    if sec.skipping then return end
     local w = acquire("bar", function()
         local f = CreateFrame("Frame", nil, content)
         f.bg = f:CreateTexture(nil, "BACKGROUND")
@@ -405,6 +435,7 @@ pages.Overview = function()
         { M(totals.AH + totals.DE + totals.VENDOR), "Bag items you can cash in", GREEN },
     })
 
+    P.Section("Plan", "Your plan", 1)
     -- Your plan: what to do now at your level, then what's coming up.
     local plan = ns.Research.Plan()
     local tri = ns.Quests.Triage()
@@ -499,6 +530,7 @@ pages.Overview = function()
     if not (QD and QD.Has()) then missing[#missing + 1] = "Questie (quests and questing zones)" end
     if #missing > 0 then P.Note("Install " .. table.concat(missing, " and ") .. " for a fuller plan.", GRAY) end
 
+    P.Section("To do", "To do", 2)
     P.Header("Next steps")
     local n = 0
     local r = ns.Spec.Report()
@@ -564,6 +596,7 @@ pages.Overview = function()
     if n == 0 then P.Note("Nothing pressing. Go adventure!", GRAY) end
 
     if level < maxLevel then
+        P.Section("Leveling", "Leveling", 3)
         P.Header("Leveling")
         P.Bar("Experience", s.xp, s.max, "b97cff")
         P.Row({ icon = ICONS.Clock, title = "Time to next level",
@@ -596,6 +629,7 @@ pages.Gear = function()
     local names = D.StatNames
     local ws = {}
     for i = 1, math.min(5, #wl) do ws[#ws + 1] = names[wl[i][1]] or wl[i][1] end
+    P.Section("Spec", "Spec & stats", 3)
     local choices = { { label = "Auto", active = not manual, onClick = function() ns:SetSpec("auto") ns.Gear.Snapshot() end } }
     for _, s in ipairs(D.Specs[c.class] or {}) do
         choices[#choices + 1] = { label = s.name .. "  " .. color(GRAY, s.role), active = manual and s.name == spec.name,
@@ -609,6 +643,7 @@ pages.Gear = function()
     end
     P.Note("Stat priority for " .. spec.name .. ": " .. table.concat(ws, " > ") .. ".", GRAY)
 
+    P.Section("Upgrades", "Upgrades", 1)
     P.Header("Upgrades in your bags", #ups > 0 and color(GREEN, #ups .. " found") or nil)
     if #ups == 0 then P.Note("None right now. Gear you loot is checked automatically.", GRAY) end
     for _, u in ipairs(ups) do
@@ -675,6 +710,7 @@ pages.Gear = function()
     end
     for _, hint in ipairs(R.MissingData()) do P.Note(hint, GRAY) end
 
+    P.Section("Equipped", "Equipped", 2)
     P.Header("Equipped")
     for _, slot in ipairs(D.SlotOrder) do
         local g = c.gear[slot]
@@ -705,9 +741,12 @@ pages.Bags = function()
         scanInfo = last and (" Last full scan " .. ns.Duration(time() - last) .. " ago.") or " No scan yet: open the auction house and a scan starts by itself."
     end
     local ench = ns.Professions.Rank("Enchanting")
-    P.Note("Auction prices from " .. src .. "." .. scanInfo .. "\n" ..
-        (ench and ("You can disenchant items that need up to " .. ench .. " Enchanting.") or
-            "You don't have Enchanting, so items aren't marked Disenchant. Their disenchant value is still shown for reference."), GRAY)
+    local sectionNotes = {
+        AH = "Auction prices from " .. src .. "." .. scanInfo,
+        DE = ench and ("You can disenchant items that need up to " .. ench .. " Enchanting.") or nil,
+        VENDOR = not ench and "You don't have Enchanting, so nothing is marked Disenchant; hover an item for its disenchant value." or nil,
+    }
+    local short = { AH = "Auction", DE = "Disenchant", VENDOR = "Vendor", KEEP = "Keep" }
 
     local sections = {
         { "AH", "Sell on the auction house", "Worth more there than at a vendor, even after the 5% cut." },
@@ -715,12 +754,13 @@ pages.Bags = function()
         { "VENDOR", "Sell to a vendor", "Nothing beats the vendor price." },
         { "KEEP", "Keep", "Upgrades, quest items and materials your recipes use." },
     }
-    for _, sec in ipairs(sections) do
-        local action, title, why = sec[1], sec[2], sec[3]
+    for i, sd in ipairs(sections) do
+        local action, title, why = sd[1], sd[2], sd[3]
         if counts[action] > 0 then
             local total = action == "AH" and totals.AH or action == "DE" and totals.DE or action == "VENDOR" and totals.VENDOR or nil
+            P.Section(action, short[action] .. " (" .. counts[action] .. ")", i)
             P.Header(ns.Disposition.Labels[action] .. "  " .. color("ffffff", title), total and M(total) or nil)
-            P.Note(why, GRAY)
+            P.Note(why .. (sectionNotes[action] and ("  " .. sectionNotes[action]) or ""), GRAY)
             for _, a in ipairs(list) do
                 if a.action == action then
                     local alt = {}
@@ -774,7 +814,8 @@ pages.Professions = function()
                 sub = ns.Mats.Line(mp), sub2 = ns.Mats.Summary(mp) .. color(GRAY, "   ·   Then: ") .. long, right = short })
     end
 
-    for _, p in ipairs(profs) do
+    for pi, p in ipairs(profs) do
+        P.Section(p.name, p.name, pi)
         P.Header(p.name, string.format("%d / %d", p.rank or 0, p.max or 0))
         P.Bar("Skill", p.rank or 0, p.max or 0, (p.rank or 0) >= (p.max or 1) and "ff8040" or "4cc94c")
         local hint = PR.TrainerHint(p)
@@ -824,6 +865,7 @@ pages.Professions = function()
     local wanted = CR.WantedRecipes()
     local sealed, fillable = CR.Todo()
     if sealed > 0 or #fillable > 0 or #wanted > 0 then
+        P.Section("Favor", "Merchant's Favor", 90)
         P.Header("Merchant's Favor", favor and (favor .. " Favor") or nil)
         if sealed > 0 then
             P.Row({ icon = ICONS.Bags, title = string.format("Turn in %d sealed crate%s", sealed, sealed > 1 and "s" or ""),
@@ -849,6 +891,7 @@ pages.Professions = function()
         end
     end
     if #others > 0 then
+        P.Section("Alts", "Other characters", 95)
         P.Header("Your other characters")
         for _, o in ipairs(others) do P.Row({ title = o[1], sub = o[2] }) end
     end
@@ -867,7 +910,9 @@ pages.Money = function()
         P.Note("No auction prices yet. Open the auction house once and a price scan runs by itself; this page fills in after that.", GOLD)
     end
 
+    P.Section("Cash", "Cash in", 1)
     P.Header("Cash in", M(plan.totalCash))
+    P.Note("Other characters' numbers are from the last time you logged in on them. Log in on each once (and open their bank and profession windows) to include them.", GRAY)
     local any = false
     for _, row in ipairs(plan.chars) do
         if row.total > 0 then
@@ -884,6 +929,7 @@ pages.Money = function()
     if not any then P.Note("Nothing to sell right now on any character (as of their last login).", GRAY) end
 
     if plan.enchanter and #plan.mail > 0 then
+        P.Section("Mail", "Mail to enchanter", 2)
         P.Header("Mail to your enchanter", ns.CharLabel(plan.enchanter.char))
         P.Note("These unbound items are worth more as enchanting materials than sold. Mail them to "
             .. ns.CharLabel(plan.enchanter.char) .. " to disenchant.", GRAY)
@@ -897,6 +943,7 @@ pages.Money = function()
         end
     end
 
+    P.Section("Craft", "Craft & sell", 3)
     P.Header("Craft and sell", "profit after materials")
     P.Choices("Grinding:", {
         { label = "Skip grinds", active = ns.db.settings.noGrind, onClick = function() ns.db.settings.noGrind = true ns.RenderUI() end },
@@ -920,6 +967,7 @@ pages.Money = function()
     end
 
     if #plan.gather > 0 then
+        P.Section("Gather", "Gather & sell", 4)
         P.Header("Gather and sell")
         for _, g in ipairs(plan.gather) do
             local parts = {}
@@ -934,7 +982,6 @@ pages.Money = function()
                     sub2 = nextLine })
         end
     end
-    P.Note("Other characters' numbers are from the last time you logged in on them. Log in on each once (and open their bank and profession windows) to include them.", GRAY)
 end
 
 pages.Talents = function()
@@ -961,6 +1008,7 @@ pages.Talents = function()
     P.Note("Gear is scored for " .. ns:SpecLabel() .. ", " .. tostring(r.how) .. ".", r.guess and "ff8040" or GRAY)
 
     local tree = r.specTree and r.trees[r.specTree]
+    P.Section("Taken", "Your talents", 2)
     P.Header("Your " .. spec.name .. " talents", tree and (tree.points .. " points") or nil)
     local any = false
     for _, t in ipairs(tree and tree.talents or {}) do
@@ -981,6 +1029,7 @@ pages.Talents = function()
             if s.note then parts[#parts + 1] = s.note end
             return #parts > 0 and table.concat(parts, ". ") or nil
         end
+        P.Section("Next", "Best next", 1)
         P.Header("Best talent to take next", g.build.name)
         if g.best then
             local b = g.best
@@ -1014,6 +1063,7 @@ pages.Talents = function()
         if #m > 0 then P.Note("Not in your talent tree (renamed or removed in Forever): " .. table.concat(m, ", "), GRAY) end
         P.Note("Build: " .. g.build.name .. ", from " .. g.build.source .. ". Points are listed in the order to take them.", GRAY)
     else
+        P.Section("Next", "Best next", 1)
         P.Header("What you can take next", "from the game's " .. spec.name .. " tree")
         local shown = 0
         for _, t in ipairs(r.next or {}) do
@@ -1028,7 +1078,8 @@ pages.Talents = function()
             .. "Leave a Note to Claude with the spec you want and a build can be added.", GRAY)
     end
 
-    -- Other trees, briefly.
+    -- Other trees, briefly (with your talents).
+    P.Section("Taken", "Your talents", 2)
     for i, other in ipairs(r.trees) do
         if i ~= r.specTree and other.points > 0 then
             local names = {}
@@ -1048,11 +1099,13 @@ pages.Quests = function()
         { t.completeXP, "XP waiting to turn in", t.completeXP > 0 and GREEN or nil },
     })
     if #t.complete > 0 then
+        P.Section("Turn in", "Turn in (" .. #t.complete .. ")", 1)
         P.Header("Ready to turn in", color(GREEN, string.format("%.0f%% of a level", s.max > 0 and t.completeXP / s.max * 100 or 0)))
         for _, q in ipairs(t.complete) do
             P.Row({ icon = ICONS.Quest, title = q.title, right = q.xp > 0 and (q.xp .. " XP") or nil })
         end
     end
+    P.Section("Active", "In progress (" .. #t.active .. ")", 2)
     P.Header("In progress", "best first")
     if #t.active == 0 then P.Note("Your quest log is empty. Pick up quests in one of the zones below.", GRAY) end
     for _, q in ipairs(t.active) do
@@ -1060,6 +1113,7 @@ pages.Quests = function()
         P.Row({ title = color(hex, string.format("[%d]  %s", q.level or 0, q.title)), sub = q.advice,
                 right = q.xp > 0 and (q.xp .. " XP") or nil })
     end
+    P.Section("Zones", "Zones", 3)
     P.Header("Zones for your level")
     local zones = ns.Quests.Zones()
     if #zones == 0 then P.Note("No suggestions for this level.", GRAY) end
@@ -1086,11 +1140,70 @@ local function updateFooter()
     else footerText:SetPoint("BOTTOMLEFT", SIDEBAR + 14, 16) end
 end
 
+-- The tab bar for the current page's sections.
+local function drawSectionTabs()
+    if not sec.tabsY or #sec.list < 2 then return end
+    local list = {}
+    for _, s in ipairs(sec.list) do list[#list + 1] = s end
+    table.sort(list, function(a, b) return a.order < b.order end)
+    local x, rowY = 0, sec.tabsY + 4
+    for _, s in ipairs(list) do
+        local b = acquire("sectiontab", function()
+            local f = CreateFrame("Button", nil, content, "BackdropTemplate")
+            f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            f.text:SetPoint("CENTER")
+            f.line = f:CreateTexture(nil, "ARTWORK")
+            f.line:SetColorTexture(ACCENT[1], ACCENT[2], ACCENT[3], 1)
+            f.line:SetPoint("BOTTOMLEFT", 1, 1)
+            f.line:SetPoint("BOTTOMRIGHT", -1, 1)
+            f.line:SetHeight(2)
+            local hl = f:CreateTexture(nil, "HIGHLIGHT")
+            hl:SetAllPoints()
+            hl:SetColorTexture(1, 1, 1, 0.08)
+            f:SetScript("OnMouseDown", dragStart)
+            f:SetScript("OnClick", function(self)
+                if wasDrag() then return end
+                sectionState[current] = self.section
+                scroll:SetVerticalScroll(0)
+                ns.RenderUI()
+            end)
+            return f
+        end)
+        local active = sectionState[current] == s.name
+        b.section = s.name
+        b.text:SetText(s.label)
+        b.text:SetFontObject(active and "GameFontNormal" or "GameFontHighlight")
+        b.line:SetShown(active)
+        b:SetBackdropColor(1, 1, 1, active and 0.10 or 0.03)
+        b:SetBackdropBorderColor(1, 1, 1, active and 0.25 or 0.10)
+        local w = b.text:GetStringWidth() + 26
+        if x + w > CONTENT_W and x > 0 then x, rowY = 0, rowY + 34 end
+        b:SetPoint("TOPLEFT", content, "TOPLEFT", x, -rowY)
+        b:SetSize(w, 30)
+        x = x + w + 6
+    end
+end
+
 function ns.RenderUI()
     if not (frame and frame:IsShown() and ns.char) then return end
     resetPools()
+    resetSections()
     rowIndex = 0
     local ok, err = pcall(pages[current])
+    -- No section drawn (first visit, or the remembered one is gone): open the
+    -- first tab and draw again.
+    if ok and sec.tabsY and not sec.found and #sec.list > 0 then
+        local first = sec.list[1]
+        for _, s in ipairs(sec.list) do if s.order < first.order then first = s end end
+        sectionState[current] = first.name
+        resetPools()
+        resetSections()
+        rowIndex = 0
+        ok, err = pcall(pages[current])
+    end
+    sec.skipping = false
+    drawSectionTabs()
     if not ok then
         ns:LogError("page " .. current, err)
         P.Note("Something went wrong drawing this page (saved to the error log): " .. tostring(err), RED)
