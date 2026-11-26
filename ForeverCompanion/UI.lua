@@ -625,7 +625,9 @@ pages.Overview = function()
         local nl = ns.Research.NextLevel()
         local bits = {}
         if nl.talent then bits[#bits + 1] = "a talent point" end
-        if nl.spells then bits[#bits + 1] = #nl.spells == 1 and nl.spells[1] or (#nl.spells .. " new spells at your trainer") end
+        if nl.spells then bits[#bits + 1] = #nl.spells == 1 and nl.spells[1] or (#nl.spells .. " new spells at your trainer")
+        elseif nl.trainingLevel == nl.level then bits[#bits + 1] = "new spells at your class trainer" end
+        if nl.trainingLevel ~= nl.level and #bits > 0 then bits[#bits + 1] = "(next class training at " .. nl.trainingLevel .. ")" end
         for i = 1, math.min(2, #nl.items) do bits[#bits + 1] = nl.items[i] end
         if #bits > 0 then
             P.Row({ icon = "Interface\\Icons\\Spell_Holy_SurgeOfLight", title = string.format("Next up: level %d", nl.level),
@@ -1386,6 +1388,9 @@ pages.Settings = function()
     })
 
     P.Section("Data", "Data", 4)
+    P.Header("Feedback")
+    P.Row({ icon = ICONS.Quest, title = "Share notes and errors", sub = "Opens your notes, ready to copy and paste into Discord for the addon's author.",
+            onClick = function() ns.Share.Open() end })
     P.Header("Saved data")
     P.Note("Each character's bags, bank, gear and recipes are saved so pages can plan across characters. Prices, notes and settings are shared.", GRAY)
     P.Row({ icon = ICONS.Bags, title = "Reset this character's data", sub = "Bags and gear refresh right away; open your bank and profession windows again.",
@@ -1720,7 +1725,7 @@ local function build()
     noteBtn:SetScript("OnClick", function() StaticPopup_Show("FOREVERCOMPANION_NOTE", current) end)
     noteBtn:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Leave a note about what you see. It's saved with the page you're on (written to disk when you /reload or log out).", 1, 1, 1, 1, true)
+        GameTooltip:SetText("Leave a note about what you see; it's saved with the page you're on. To send your notes, use Share notes in Settings > Data and paste them into Discord.", 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     noteBtn:SetScript("OnLeave", GameTooltip_Hide)
@@ -1817,11 +1822,11 @@ StaticPopupDialogs["FOREVERCOMPANION_NOTE"] = {
     end,
     OnAccept = function(self)
         local eb = self.editBox or self.EditBox or (self.GetEditBox and self:GetEditBox())
-        if eb and ns:AddNote(eb:GetText()) then ns:Print("note saved. /reload or log out so it's written to disk.") end
+        if eb and ns:AddNote(eb:GetText()) then ns:Print("note saved. To send your notes, use Share notes in Settings > Data (or /fc share) and paste into Discord.") end
     end,
     EditBoxOnEnterPressed = function(self)
         local parent = self:GetParent()
-        if ns:AddNote(self:GetText()) then ns:Print("note saved. /reload or log out so it's written to disk.") end
+        if ns:AddNote(self:GetText()) then ns:Print("note saved. To send your notes, use Share notes in Settings > Data (or /fc share) and paste into Discord.") end
         parent:Hide()
     end,
     EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,

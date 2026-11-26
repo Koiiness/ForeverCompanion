@@ -1,48 +1,89 @@
 # Forever Companion
 
-A World of Warcraft: **Forever** addon that tracks your character and tells you what to do next: which quests and dungeons have upgrades for you, what to do with every item in your bags, what to craft, and which talent to take.
+A World of Warcraft: **Forever** addon that helps you enjoy the game without grinding past the fun. It tells you the next good thing to do, which gear is worth chasing and why, what to do with every item in your bags, and how to make gold without going broke. It also teaches newer players as they go.
 
-Built for the Forever client 1.60.1 (Interface 16001).
-
-## What it does
-
-- **Your plan.** The Overview page lists the quests to pick up, finish or turn in, and the dungeons to run, ranked by the upgrades they hold for your spec.
-- **Gear.** Scores items for your spec (Tank, Healer or DPS, detected from your talents), shows the stat changes behind every upgrade, accounts for set bonuses, and lists the best upgrade per slot from quests, dungeons, the auction house and crafting.
-- **Bags.** For every item: keep, sell to a vendor, disenchant (with the odds for each material) or put on the auction house. Consumables, profession tools and materials you use are kept. Handles Waylaid Crates and Merchant's Favor.
-- **Money.** A gold plan across all your characters: what each can cash in, unbound greens to mail to your enchanter, the most profitable recipes any of them knows, and the best-paying herbs, ore and leather each gatherer can farm. A **safety net** keeps gold aside for upcoming class training and repairs, tracks a savings goal (a mount at 40 by default), and never suggests spending what you need.
-- **Settings.** Solo or group leveling, how much gold to keep aside, your savings goal, celebrations and sound, tooltips, touch mode, the minimap button, and resetting saved data.
-- **Professions.** Skill-up recipes with materials you have or still need, what to do with the result, money makers, and recipes worth getting with where to get them.
-- **Talents.** The best next talent from a Forever leveling build (Discipline Priest so far; more specs can be added in `Data.lua`).
-- **Quests.** XP per hour, time to level, a quest log sorted by difficulty, and zones for your level.
-- **Tracking.** Gear, bags and bank across all your characters (`/fc find <item>`), with prices from your own auction house scans.
-- **Celebrations.** A card with a sound when you get an upgrade (tap Equip to wear it), when you pick up gear for a few levels from now, and when you level up. `/fc celebrate` turns them off; `/fc testcard` shows a sample.
-- **Coming soon.** Gear that unlocks in the next few levels (Gear page), and what your next level brings at the top of your plan.
-- **Tips for newer players.** A short tip the first time something comes up, with Got it so it never returns; Settings has an "I know WoW" switch to hide them all.
+Built for the Forever client 1.60.1 (Interface 16001). Version 0.2.0.
 
 ## Install
 
-1. Download this repository (green **Code** button, then **Download ZIP**) and unzip it.
-2. Copy the inner `ForeverCompanion` folder into:
-   - Mac: `/Applications/World of Warcraft/_forever_/Interface/AddOns/`
-   - Windows: `C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\`
-3. Restart the game, or type `/reload`.
+### 1. Download
 
-Type `/fc` or click the minimap button to open it. `/fc help` lists every command.
+On this page, click the green **Code** button, then **Download ZIP**, and unzip the file. You'll get a folder called `ForeverCompanion-main`, and inside it another folder called **`ForeverCompanion`**. That inner folder is the addon.
 
-On a touch screen, turn on **Touch mode** in the sidebar (or `/fc touch`) for a bigger window. You can drag any list to scroll.
+### 2. Copy the addon into WoW
 
-## Works better with (optional)
+Copy the inner **`ForeverCompanion`** folder (not `ForeverCompanion-main`) into your Forever AddOns folder:
 
-- **[AtlasLoot Classic Forever](https://www.curseforge.com/wow/addons/atlasloot-forever)**: dungeon and raid drops, drop rates, and where patterns drop.
-- **[Questie](https://github.com/Questie/Questie/releases)**: quests you haven't picked up yet whose rewards are upgrades.
-- **TradeSkillMaster** or **Auctionator**: auction prices. Without them, Forever Companion scans the auction house itself each time you open it (once every 15 minutes, the server's limit).
+- **Mac:** `/Applications/World of Warcraft/_forever_/Interface/AddOns/`
+- **Windows:** `C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\`
 
-## Good to know
+If the `AddOns` folder doesn't exist yet, create it. You know it's right when this file exists:
 
-- Open each of your profession windows once so recipes are recorded, and visit your bank once so it's included.
-- Prices fill in the first time you open the auction house.
-- Some game data (disenchant results, crate fill lists, leveling builds) comes from community guides and lives in `Data.lua` and `Crates.lua`, so it's easy to correct.
-- Something wrong? `/fc errors` shows any errors the addon caught, and `/fc note <text>` saves a note with the page you were on.
+```
+.../_forever_/Interface/AddOns/ForeverCompanion/ForeverCompanion.toc
+```
+
+Can't find your WoW folder? In the Battle.net app, select WoW Forever, click the gear next to Play, and choose **Show in Finder** (Mac) or **Show in Explorer** (Windows).
+
+### 3. Turn it on
+
+Start the game (or type `/reload` if it's running). On the character screen, click **AddOns** (bottom left) and make sure **Forever Companion** is ticked. If it says "Out of date", tick **Load out of date AddOns**.
+
+### 4. Open it
+
+Click the book icon on your minimap, or type `/fc`.
+
+### Optional add-ons that make it better
+
+All of these are free on CurseForge, and Forever Companion works without them:
+
+- **[AtlasLoot Classic Forever](https://www.curseforge.com/wow/addons/atlasloot-forever)** adds dungeon and raid drops, drop rates, and where crafting patterns drop.
+- **[Questie](https://github.com/Questie/Questie/releases)** adds quests you haven't picked up yet whose rewards are upgrades, good zones to quest in, and where to buy patterns and materials.
+- **TradeSkillMaster** or **Auctionator** provide auction prices. Without them, Forever Companion scans the auction house itself whenever you open it (at most once every 15 minutes, the server's limit).
+
+## Your first five minutes
+
+1. **Open the addon** (`/fc` or the minimap button). The **Next up** card at the top suggests the one best thing to do right now.
+2. **Open the auction house once.** A price scan runs by itself, and from then on the addon knows what your items are worth.
+3. **Open each of your profession windows once**, and **visit your bank once**, so your recipes and stored items are included.
+4. **Visit your class trainer once.** The addon then knows what training costs are coming, and keeps that gold aside in your safety net.
+5. **Check Settings** (gear icon at the bottom of the sidebar): solo or group leveling, tips on or off, Touch mode, and more.
+
+Log in on each of your characters once, and the Money page can plan across all of them.
+
+## What it does
+
+- **Next up and your plan.** One clear suggestion at the top of Overview. Below it: turn-ins, the best zone to quest in at your level, quests and dungeons with upgrades for you, and what your next level brings.
+- **Gear.** Upgrades in your bags (tap to equip), what to chase for your weakest slots (quest, dungeon with drop chance, crafting, or the auction house), gear coming in the next few levels, and why each item is better for your spec (e.g. "+12 Intellect, +6 Spirit"). Set bonuses and unique items are taken into account.
+- **Bags.** For every item: auction it, disenchant it (with the odds for each material), sell it to a vendor, or keep it. Potions, buff food, profession tools and the materials you use are always kept. Handles Waylaid Crates and Merchant's Favor.
+- **Money.** A **safety net** that keeps gold aside for training and repairs, a savings goal (a mount at 40 by default), and gold ideas across your characters: what to sell, greens to mail to your enchanter, profitable crafts (with how you'd get the materials), and what your gatherers can farm. It skips grinding ideas unless you ask for them.
+- **Professions.** Recipes that give skill-ups, with the materials you have and still need, what to do with what you make, and recipes worth learning with where to get them (trainer and cost, vendor, or drop).
+- **Talents.** The best next talent from a Forever leveling build (Discipline Priest so far; more can be added in `Data.lua`).
+- **Quests.** XP per hour, time to level, your quest log sorted by how good it is for you, and zones for your level.
+- **Celebrations.** A card with a sound when you get a real upgrade (tap **Equip**) or level up. Small upgrades get a quiet chat line. Nothing pops up during combat.
+- **Tips for newer players.** A short tip the first time something comes up. **Got it** hides it for good, and Settings has an **I know WoW** switch.
+
+Type `/fc help` in game for every command.
+
+## Updating
+
+Download the ZIP again and replace the `ForeverCompanion` folder in your AddOns folder with the new one. Your settings, notes and saved data are kept; they live in a separate folder (`WTF`).
+
+## Feedback: send notes to the author
+
+1. In game, click **Leave a note** in the sidebar (or type `/fc note something looks off here`). Each note remembers which page you were on, your level and your zone.
+2. When you're ready to send, open **Settings → Data → Share notes and errors** (or type `/fc share`). A window opens with your notes and any recent addon errors, already selected.
+3. Press **Cmd+C** (Mac) or **Ctrl+C** (Windows), then paste it into Discord and send it to Koiiness.
+4. Back in the window, click **Clear notes I've sent** so you don't send the same ones twice.
+
+## Troubleshooting
+
+- **It doesn't show up in the AddOns list.** The folder is probably nested one level too deep. You need `AddOns/ForeverCompanion/ForeverCompanion.toc`, not `AddOns/ForeverCompanion-main/ForeverCompanion/...`.
+- **"Out of date".** Tick **Load out of date AddOns** on the AddOns screen.
+- **Prices are missing.** Open the auction house once and wait a few seconds for the scan.
+- **Dungeon drops or quest suggestions are missing.** Install AtlasLoot Classic Forever and Questie (see above).
+- **The spec it uses is wrong.** Pick yours on the Gear page under **Spec & stats**.
+- **Something errors or looks wrong.** Send your notes as above. They include the addon's recent errors.
 
 ## License
 

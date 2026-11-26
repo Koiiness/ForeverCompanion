@@ -386,6 +386,8 @@ function R.NextLevel()
     local nextL = level + 1
     local out = { level = nextL, items = {} }
     if nextL >= 10 then out.talent = true end
+    -- Class training comes at even levels.
+    out.trainingLevel = (nextL % 2 == 0) and nextL or (nextL + 1)
     for _, s in ipairs(ns.char and ns.char.training or {}) do
         if s.level == nextL then
             out.spells = out.spells or {}

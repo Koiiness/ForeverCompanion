@@ -2,7 +2,7 @@
 ## Title: Forever Companion
 ## Notes: Tracks gear, bags, professions and recipes; advises on upgrades, talents, questing and vendor / disenchant / AH decisions.
 ## Author: You
-## Version: 0.1.0
+## Version: 0.2.0
 ## SavedVariables: ForeverCompanionDB
 ## OptionalDeps: TradeSkillMaster, Auctionator, AtlasLootClassic, QuestieDB, Questie
 ## IconTexture: Interface\Icons\INV_Misc_Book_09
@@ -27,3 +27,4 @@ Tooltip.lua
 Celebrate.lua
 UI.lua
 Minimap.lua
+Share.lua

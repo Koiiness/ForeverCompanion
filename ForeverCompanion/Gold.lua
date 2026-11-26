@@ -92,12 +92,24 @@ function GO.RepairBuffer()
     return UnitLevel("player") * 300, false   -- rough guess until a repair is seen
 end
 
+-- "Class training at levels 34 and 36": the even levels the safety net covers.
+function GO.TrainingLabel()
+    local level = UnitLevel("player")
+    local levels = {}
+    for l = level + 1, level + lookahead() do
+        if l % 2 == 0 then levels[#levels + 1] = tostring(l) end
+    end
+    if #levels == 0 then return "Class training" end
+    if #levels == 1 then return "Class training at level " .. levels[1] end
+    return "Class training at levels " .. table.concat(levels, ", ", 1, #levels - 1) .. " and " .. levels[#levels]
+end
+
 -- Returns reserve and its parts { { label, amount, known } }.
 function GO.Reserve()
     local train, _, known = GO.Training()
     local repair, repairKnown = GO.RepairBuffer()
     local parts = {
-        { label = string.format("Class training to level %d", UnitLevel("player") + lookahead()), amount = train, known = known },
+        { label = GO.TrainingLabel(), amount = train, known = known },
         { label = "Repairs", amount = repair, known = repairKnown },
     }
     return train + repair, parts

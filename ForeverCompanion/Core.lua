@@ -295,7 +295,7 @@ end
 
 ns:Command("note", "<text> leave a note (saved when you /reload or log out)", function(arg)
     if ns:AddNote(arg) then
-        ns:Print("note saved. It's written to disk when you /reload or log out.")
+        ns:Print("note saved. To send your notes, use Share notes in Settings > Data (or /fc share) and paste into Discord.")
     else
         ns:Print("usage: /fc note <what you want to say>")
     end
