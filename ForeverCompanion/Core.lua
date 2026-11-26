@@ -7,6 +7,8 @@ local DEFAULTS = {
         tooltip = true,        -- add advice lines to item tooltips
         autoSellJunk = false,  -- sell gray items automatically at a vendor
         autoScan = true,       -- full AH price scan when the AH opens (once per 15 min)
+        touch = false,         -- bigger window for touch screens
+        noGrind = true,        -- hide money ideas that need grinding far below your level
         ahCutPct = 5,          -- auction house cut, percent
         ahMinGain = 1000,      -- copper: AH must beat the next option by this much to be worth listing
         specOverride = nil,    -- spec name from Data.Specs, e.g. "Shadow"; nil = detect from talents

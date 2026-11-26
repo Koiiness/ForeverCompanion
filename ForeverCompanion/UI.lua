@@ -12,6 +12,32 @@ local ACCENT = { 0.5, 0.83, 1 }
 local frame, scroll, content, subtitle, footerText, footerButtons, navButtons
 local current = "Overview"
 
+-- Drag to scroll: works with a finger on a touch screen and with a mouse.
+-- A press that moves more than a few pixels scrolls instead of clicking.
+local drag = { active = false, moved = false }
+local function dragStart()
+    if not scroll then return end
+    local _, y = GetCursorPosition()
+    drag.active, drag.moved = true, false
+    drag.y0, drag.s0 = y, scroll:GetVerticalScroll()
+end
+local function dragUpdate()
+    if not drag.active then return end
+    if not IsMouseButtonDown("LeftButton") then drag.active = false return end
+    local _, y = GetCursorPosition()
+    local dy = (y - drag.y0) / frame:GetEffectiveScale()
+    if math.abs(dy) > 6 then drag.moved = true end
+    if drag.moved then
+        local range = scroll:GetVerticalScrollRange()
+        scroll:SetVerticalScroll(math.max(0, math.min(range, drag.s0 + dy)))
+    end
+end
+-- True (once) if the last press was a drag, so it shouldn't count as a click.
+local function wasDrag()
+    if drag.moved then drag.moved = false return true end
+    return false
+end
+
 ----------------------------------------------------------------------
 -- Small helpers
 ----------------------------------------------------------------------
@@ -205,7 +231,9 @@ function P.Row(opts)
             end
         end)
         f:SetScript("OnLeave", GameTooltip_Hide)
+        f:SetScript("OnMouseDown", dragStart)
         f:SetScript("OnClick", function(self)
+            if wasDrag() then return end
             if self.link and IsModifiedClick() and HandleModifiedItemClick then
                 HandleModifiedItemClick(self.link)
             elseif self.onClick then
@@ -294,7 +322,8 @@ function P.Choices(label, choices)
             local hl = f:CreateTexture(nil, "HIGHLIGHT")
             hl:SetAllPoints()
             hl:SetColorTexture(1, 1, 1, 0.08)
-            f:SetScript("OnClick", function(self) if self.fn then self.fn() end end)
+            f:SetScript("OnMouseDown", dragStart)
+            f:SetScript("OnClick", function(self) if not wasDrag() and self.fn then self.fn() end end)
             return f
         end)
         b.text:SetText(ch.label)
@@ -868,6 +897,14 @@ pages.Money = function()
     end
 
     P.Header("Craft and sell", "profit after materials")
+    P.Choices("Grinding:", {
+        { label = "Skip grinds", active = ns.db.settings.noGrind, onClick = function() ns.db.settings.noGrind = true ns.RenderUI() end },
+        { label = "Show everything", active = not ns.db.settings.noGrind, onClick = function() ns.db.settings.noGrind = false ns.RenderUI() end },
+    })
+    if (plan.hiddenGrind or 0) > 0 then
+        P.Note(string.format("%d recipe%s hidden because the materials mean grinding mobs far below your level.",
+            plan.hiddenGrind, plan.hiddenGrind > 1 and "s" or ""), GRAY)
+    end
     if #plan.crafts == 0 then
         P.Note("No profitable recipes found yet. Open each character's profession windows once so recipes are recorded, and scan the AH.", GRAY)
     end
@@ -1153,6 +1190,18 @@ local function build()
         GameTooltip:Show()
     end)
     noteBtn:SetScript("OnLeave", GameTooltip_Hide)
+    local touchBtn = CreateFrame("Button", nil, side, "UIPanelButtonTemplate")
+    touchBtn:SetSize(SIDEBAR - 20, 24)
+    touchBtn:SetPoint("BOTTOMLEFT", noteBtn, "TOPLEFT", 0, 6)
+    local function touchLabel() touchBtn:SetText("Touch mode: " .. (ns.db.settings.touch and "on" or "off")) end
+    touchLabel()
+    touchBtn:SetScript("OnClick", function() ns:SetTouch(not ns.db.settings.touch) touchLabel() end)
+    touchBtn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Makes the window bigger so it's easier to tap. You can drag lists to scroll either way.", 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    touchBtn:SetScript("OnLeave", GameTooltip_Hide)
 
     -- Scrollable content
     scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
@@ -1161,6 +1210,11 @@ local function build()
     content = CreateFrame("Frame", nil, scroll)
     content:SetSize(CONTENT_W, 10)
     scroll:SetScrollChild(content)
+    scroll:EnableMouse(true)
+    scroll:SetScript("OnMouseDown", dragStart)
+    content:EnableMouse(true)
+    content:SetScript("OnMouseDown", dragStart)
+    frame:SetScript("OnUpdate", dragUpdate)
 
     -- Footer
     local line = frame:CreateTexture(nil, "ARTWORK")
@@ -1191,6 +1245,7 @@ local function build()
     footerText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     footerText:SetJustifyH("LEFT")
 
+    frame:SetScale(ns.db.settings.touch and 1.25 or 1)
     frame:SetScript("OnShow", ns.RenderUI)
     frame:Hide()
 end
@@ -1242,3 +1297,11 @@ StaticPopupDialogs["FOREVERCOMPANION_NOTE"] = {
     EditBoxOnEscapePressed = function(self) self:GetParent():Hide() end,
     timeout = 0, whileDead = true, hideOnEscape = true,
 }
+
+-- Touch mode: a bigger window that's easier to tap.
+function ns:SetTouch(on)
+    ns.db.settings.touch = on and true or false
+    if frame then frame:SetScale(on and 1.25 or 1) end
+    ns:Print("touch mode " .. (on and "on" or "off") .. ".")
+end
+ns:Command("touch", "toggle touch mode (bigger window, easier to tap)", function() ns:SetTouch(not ns.db.settings.touch) end)

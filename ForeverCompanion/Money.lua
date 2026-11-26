@@ -145,8 +145,17 @@ function MO.Plan()
     -- Best first, counting effort: grinding or pricey materials push a recipe down.
     table.sort(plan.crafts, function(a, b) return (a.score or a.profit) > (b.score or b.profit) end)
     local seen, crafts = {}, {}
+    plan.hiddenGrind = 0
     for _, cr in ipairs(plan.crafts) do
-        if not seen[cr.recipe] then seen[cr.recipe] = true crafts[#crafts + 1] = cr end
+        if not seen[cr.recipe] then
+            seen[cr.recipe] = true
+            -- Skip grinding: hide recipes whose materials mean farming mobs far below you.
+            if ns.db.settings.noGrind and cr.mp and cr.mp.effort >= (ns.Mats.Effort.grind or 6) then
+                plan.hiddenGrind = plan.hiddenGrind + 1
+            else
+                crafts[#crafts + 1] = cr
+            end
+        end
     end
     plan.crafts = crafts
     table.sort(plan.gather, function(a, b)

@@ -25,6 +25,8 @@ Built for the Forever client 1.60.1 (Interface 16001).
 
 Type `/fc` or click the minimap button to open it. `/fc help` lists every command.
 
+On a touch screen, turn on **Touch mode** in the sidebar (or `/fc touch`) for a bigger window. You can drag any list to scroll.
+
 ## Works better with (optional)
 
 - **[AtlasLoot Classic Forever](https://www.curseforge.com/wow/addons/atlasloot-forever)**: dungeon and raid drops, drop rates, and where patterns drop.
