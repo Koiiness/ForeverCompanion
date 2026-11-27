@@ -459,6 +459,47 @@ function P.Hero(opts)
     y = y + 10
 end
 
+-- A section you can fold away: a tappable header showing +/-. Returns true
+-- when it's open (draw its contents after it). Remembered per page.
+function P.Fold(key, title, right, defaultOpen)
+    if sec.skipping then return false end
+    ns.db.ui = ns.db.ui or {}
+    ns.db.ui.fold = ns.db.ui.fold or {}
+    local id = current .. ":" .. key
+    local open = ns.db.ui.fold[id]
+    if open == nil then open = defaultOpen and true or false end
+    local w = acquire("fold", function()
+        local f = CreateFrame("Button", nil, content, "BackdropTemplate")
+        f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        f.sign = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        f.sign:SetPoint("LEFT", 12, 0)
+        f.text = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        f.text:SetPoint("LEFT", 34, 0)
+        f.right = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        f.right:SetPoint("RIGHT", -12, 0)
+        local hl = f:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 1, 1, 0.06)
+        f:SetScript("OnMouseDown", dragStart)
+        f:SetScript("OnClick", function(self)
+            if wasDrag() then return end
+            ns.db.ui.fold[self.id] = not self.open
+            ns.RenderUI()
+        end)
+        return f
+    end)
+    w.id, w.open = id, open
+    w.sign:SetText(open and "-" or "+")
+    w.text:SetText(title)
+    w.right:SetText(right or "")
+    w:SetBackdropColor(1, 1, 1, open and 0.06 or 0.03)
+    w:SetBackdropBorderColor(1, 1, 1, 0.12)
+    y = y + 6
+    place(w, 40)
+    y = y + 6
+    return open
+end
+
 -- A teaching tip shown just in time, once. "Got it" hides it for good;
 -- the "I know WoW" setting hides all tips.
 function P.Tip(key, text)
@@ -1086,49 +1127,127 @@ pages.Professions = function()
 
     for pi, p in ipairs(profs) do
         P.Section(p.name, p.name, pi)
-        P.Header(p.name, string.format("%d / %d", p.rank or 0, p.max or 0))
+        local rank, max = p.rank or 0, p.max or 0
+        P.Header(p.name, string.format("skill %d of %d", rank, max))
         P.Tip("professions", "You can learn two main professions, plus Cooking, First Aid and Fishing. Recipe colors show skill points: orange always gives one, yellow usually, green sometimes, gray never.")
-        P.Bar("Skill", p.rank or 0, p.max or 0, (p.rank or 0) >= (p.max or 1) and "ff8040" or "4cc94c")
-        local hint = PR.TrainerHint(p)
-        if hint then P.Row({ icon = ICONS.Trainer, title = color(GOLD, hint) }) end
+        P.Bar("Skill", rank, max, rank >= max and "ff8040" or "4cc94c")
         local rec = c.recipes[p.name]
         local gathering = p.name == "Herbalism" or p.name == "Mining" or p.name == "Skinning" or p.name == "Fishing"
+        local hint = PR.TrainerHint(p)
+
         if rec then
-            local ups = PR.SkillUps(p.name)
-            P.SubHeader("Level it up")
-            if #ups == 0 then
-                P.Note("Your recipes are all gray now (no more skill points). A trainer or Recipes to get has new ones.", GRAY)
+            -- The path: what to make, how many, to reach the next milestone.
+            local target = math.min(max, rank + 25)
+            local path = rank < max and PR.Path(p.name, target) or nil
+            local steps = path and path.steps or {}
+
+            -- Next up for this profession: one clear thing to do.
+            if rank >= max and hint then
+                P.Hero({ icon = ICONS.Trainer, title = hint, sub = "You're at the cap for your current rank. Training raises it so you can keep leveling." })
+            elseif steps[1] then
+                local s1 = steps[1]
+                local link = s1.r.item and select(2, ns.C.GetItemInfo(s1.r.item))
+                P.Hero({ icon = link and itemIcon(link) or ICONS.Professions,
+                         title = string.format("Make %d x %s", s1.crafts, s1.name),
+                         sub = string.format("Skill %d to %d. %s", s1.from, s1.to,
+                             s1.color == "optimal" and "Orange: every craft gives a point." or
+                             (s1.color == "medium" and "Yellow: most crafts give a point." or "Green: some crafts give a point.")) })
+            elseif rank < max then
+                P.Hero({ icon = ICONS.Trainer, title = "Learn new recipes to keep leveling",
+                         sub = "None of your recipes give skill points at " .. rank .. ". See Recipes to get and Trainer below." })
             end
-            for i = 1, math.min(4, #ups) do
-                recipeRow(ups[i].name, PR.Recipe(p.name, ups[i].name), CHANCE[ups[i].diff])
+
+            if #steps > 0 then
+                P.SubHeader(string.format("Path to %d", path.reached))
+                local CHANCE_WORD = { optimal = "orange", medium = "yellow", easy = "green" }
+                for i = 1, math.min(6, #steps) do
+                    local s = steps[i]
+                    local link = s.r.item and select(2, ns.C.GetItemInfo(s.r.item))
+                    P.Row({ link = link, icon = (not link) and ICONS.Professions or nil,
+                            title = string.format("%d.  Make %d x %s", i, s.crafts, color(PR.DiffColor[s.color] or "ffffff", s.name)),
+                            sub = string.format("Skill %d to %d  ·  %s", s.from, s.to, CHANCE_WORD[s.color] or s.color),
+                            right = color(GRAY, "+" .. (s.to - s.from)) })
+                end
+                if path.stuck then
+                    P.Note(string.format("After %d none of your recipes give points: learn new ones (see Trainer and Recipes to get).", path.reached), GOLD)
+                end
+
+                -- One combined shopping list for the whole path.
+                P.SubHeader("Shopping list")
+                local list, spend = {}, 0
+                for id, qty in pairs(path.mats) do
+                    local s = ns.Mats.Source(id, qty)
+                    list[#list + 1] = s
+                    spend = spend + (s.cost or 0)
+                end
+                table.sort(list, function(a, b)
+                    if a.effort ~= b.effort then return a.effort > b.effort end
+                    return (a.name or "") < (b.name or "")
+                end)
+                for _, s in ipairs(list) do
+                    local how = ns.Mats.Text(s)
+                    P.Row({ title = how, right = (s.cost or 0) > 0 and M(s.cost) or color(GREEN, "covered") })
+                end
+                local ok = ns.Gold.Affordable(spend)
+                P.Note(spend > 0 and (string.format("About %s to buy what you're missing.", M(spend))
+                        .. (ok and "" or "  That would dip into your safety net, so go step by step."))
+                    or "You have everything for this path.", ok and GRAY or GOLD)
+            elseif rank < max then
+                P.Note("Nothing you know gives skill points right now.", GRAY)
             end
+
+            -- Folded away until you want them.
             local money = PR.Profitable(p.name, 3)
-            if #money > 0 then
-                P.SubHeader("Make money")
+            if P.Fold(p.name .. "-money", "Make money", #money > 0 and (#money .. " recipes") or "none yet") then
+                if #money == 0 then P.Note("No recipe you know sells for more than its materials yet (with the prices known so far).", GRAY) end
                 for _, m in ipairs(money) do recipeRow(m.name, m.r) end
             end
             local toGet = PR.ToGet(p.name, 5)
-            P.SubHeader("Recipes to get")
-            if #toGet == 0 then
-                P.Note("No unlearned recipe makes an upgrade or a profit right now (with the prices known so far).", GRAY)
-            end
-            for _, g in ipairs(toGet) do
-                local why
-                if g.upgrade then
-                    local w = ns.Gear.Why(select(2, ns.C.GetItemInfo(g.r.item)) or "", g.plan.result.cmp)
-                    why = color(GREEN, "Upgrade " .. ns.Gear.UpText(g.plan.result and g.plan.result.cmp)) .. (w and (": " .. w) or "")
-                else
-                    why = color(GREEN, "Profit ~" .. M(g.profit) .. " each") .. color(GRAY, " (sells for more than its materials)")
+            if P.Fold(p.name .. "-toget", "Recipes to get", #toGet > 0 and (#toGet .. " worth learning") or "none yet") then
+                if #toGet == 0 then
+                    P.Note("No unlearned recipe makes an upgrade or a profit right now (with the prices known so far).", GRAY)
                 end
-                if (g.gap or 0) > 0 then why = why .. color("ff8040", string.format("  ·  %d skill points away", g.gap)) end
-                local link = select(2, ns.C.GetItemInfo(g.r.item))
-                local gmp = ns.Mats.Plan(g.r, g.plan.value)
-                P.Row({ link = link, title = g.name, sub = why, sub2 = color(GRAY, "Get it: ") .. g.where,
-                        sub3 = color(GRAY, "Materials: ") .. ns.Mats.Summary(gmp),
-                        right = g.cost and (ns.Gold.Affordable(g.costCopper) and color(GOLD, g.cost) or color(GRAY, g.cost .. "  after your safety net")) or nil })
+                for _, g in ipairs(toGet) do
+                    local why
+                    if g.upgrade then
+                        local w = ns.Gear.Why(select(2, ns.C.GetItemInfo(g.r.item)) or "", g.plan.result.cmp)
+                        why = color(GREEN, "Upgrade " .. ns.Gear.UpText(g.plan.result and g.plan.result.cmp)) .. (w and (": " .. w) or "")
+                    else
+                        why = color(GREEN, "Profit ~" .. M(g.profit) .. " each") .. color(GRAY, " (sells for more than its materials)")
+                    end
+                    if (g.gap or 0) > 0 then why = why .. color("ff8040", string.format("  ·  %d skill points away", g.gap)) end
+                    local link = select(2, ns.C.GetItemInfo(g.r.item))
+                    P.Row({ link = link, title = g.name, sub = why, sub2 = color(GRAY, "Get it: ") .. g.where,
+                            right = g.cost and (ns.Gold.Affordable(g.costCopper) and color(GOLD, g.cost) or color(GRAY, g.cost .. "  after your safety net")) or nil })
+                end
+            end
+            local tiers = PR.TrainerTiers(p.name)
+            local now, nowCost = PR.TrainableNow(p.name)
+            local trainerNote = (#now > 0 and (#now .. " to learn now")) or (hint and "rank up") or nil
+            if P.Fold(p.name .. "-trainer", "Trainer", trainerNote) then
+                if hint then P.Row({ icon = ICONS.Trainer, title = color(GOLD, hint) }) end
+                for _, t in ipairs(tiers) do
+                    local done = (t.skill or 0) <= max - 75 and max > 75
+                    P.Row({ icon = ICONS.Trainer, title = t.name, sub = string.format("Needs %s %d%s", p.name, t.skill or 0,
+                                (t.level or 0) > 0 and (", character level " .. t.level) or ""),
+                            right = done and color(GRAY, "done") or M(t.cost or 0) })
+                end
+                if #now > 0 then
+                    local names = {}
+                    for i = 1, math.min(5, #now) do names[#names + 1] = now[i].name end
+                    P.Row({ icon = ICONS.Trainer, title = string.format("%d recipe%s you can learn now", #now, #now > 1 and "s" or ""),
+                            sub = table.concat(names, ", ") .. (#now > 5 and ", ..." or ""), right = M(nowCost) })
+                end
+                if #tiers == 0 and #now == 0 then
+                    P.Note("Talk to your " .. p.name .. " trainer once and the addon records what it teaches and what it costs.", GRAY)
+                end
             end
         elseif not gathering then
-            P.Note("Open your " .. p.name .. " window once so its recipes are recorded.", GOLD)
+            if hint then P.Row({ icon = ICONS.Trainer, title = color(GOLD, hint) }) end
+            P.Note("Open your " .. p.name .. " window once so its recipes are recorded; then this tab shows your path and shopping list.", GOLD)
+        else
+            if hint then P.Row({ icon = ICONS.Trainer, title = color(GOLD, hint) }) end
+            P.Note(p.name .. " levels as you gather. The Money page shows what's most valuable to gather at your skill.", GRAY)
         end
     end
 

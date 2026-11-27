@@ -92,11 +92,11 @@ function MO.Plan()
         -- Crafts: learned recipes whose product sells for more than its materials.
         for prof, rec in pairs(c.recipes or {}) do
             for name, r in pairs(rec.list or {}) do
-                if r.learned ~= false and r.item and r.mats and #r.mats > 0 then
+                if r.learned ~= false and r.item and #ns.Professions.Mats(r) > 0 then
                     local market = ns.Prices.Market(r.item)
                     if market then
                         local cost, estimated = 0, false
-                        for _, m in ipairs(r.mats) do
+                        for _, m in ipairs(ns.Professions.Mats(r)) do
                             local p, exact = matCost(m.id)
                             if not p then cost = nil break end
                             cost = cost + p * m.qty

@@ -185,7 +185,7 @@ local VERDICT = {
 -- Returns { mats = {...}, effort, verdict, color, spend (gold out of pocket), value (market value of all mats), expensive }
 function MA.Plan(r, sellValue)
     local plan = { mats = {}, effort = 0, spend = 0, value = 0 }
-    for _, m in ipairs(r.mats or {}) do
+    for _, m in ipairs(ns.Professions.Mats(r)) do
         local s = MA.Source(m.id, m.qty)
         plan.mats[#plan.mats + 1] = s
         plan.effort = math.max(plan.effort, s.effort)

@@ -214,7 +214,7 @@ function P.RelevantSet()
         for _, rec in pairs(char.recipes or {}) do
             for name, r in pairs(rec.list or {}) do
                 if r.item then set[r.item] = true end
-                for _, m in ipairs(r.mats or {}) do set[m.id] = true end
+                for _, m in ipairs(ns.Professions and ns.Professions.Mats(r) or r.mats or {}) do set[m.id] = true end
                 if r.learned == false then names[name:lower()] = true end
             end
         end

@@ -83,10 +83,10 @@ local function scanModern()
                 local ok, txt = pcall(T.GetRecipeSourceText, id)
                 if ok and txt then source = PR.CleanText(txt) end
             end
-            recipes[info.name] = { learned = false, item = item, source = source }
+            recipes[info.name] = { learned = false, item = item, source = source, spell = id }
         end
         if info and info.learned then
-            recipes[info.name] = { diff = DIFF[info.relativeDifficulty] or "?", num = info.numAvailable or 0, item = item }
+            recipes[info.name] = { diff = DIFF[info.relativeDifficulty] or "?", num = info.numAvailable or 0, item = item, spell = id }
         end
         -- Materials for every recipe (learned or not), so unlearned ones can be
         -- costed too. Only learned recipes mark their materials as "keep".
@@ -180,8 +180,13 @@ function PR.SkillUps(profName)
     if not rec then return {} end
     local order = { optimal = 1, medium = 2, easy = 3 }
     local out = {}
+    local rank = PR.Rank(profName) or 0
     for name, r in pairs(rec.list) do
-        if r.learned ~= false and order[r.diff] then out[#out + 1] = { name = name, diff = r.diff, num = r.num } end
+        if r.learned ~= false then
+            -- Colors from your current skill, not from when the window was last opened.
+            local _, color = PR.Chance(r, rank)
+            if order[color] then out[#out + 1] = { name = name, diff = color, num = r.num or 0 } end
+        end
     end
     table.sort(out, function(a, b)
         if order[a.diff] ~= order[b.diff] then return order[a.diff] < order[b.diff] end
@@ -223,7 +228,7 @@ end
 function PR.Plan(r)
     local have = holdings()
     local parts, cost, known, canMake = {}, 0, true, true
-    for _, m in ipairs(r.mats or {}) do
+    for _, m in ipairs(PR.Mats(r)) do
         local name = C.GetItemInfo(m.id) or ("item " .. m.id)
         if not C.GetItemInfo(m.id) then C.RequestLoad(m.id) end
         local h = have[m.id] or 0
@@ -274,10 +279,11 @@ end
 -- Materials as one readable line: icon, amount and name, green when you
 -- have enough, red with what you have when you don't.
 function PR.MatsLine(r)
-    if not r.mats or #r.mats == 0 then return "|cff9a9a9amaterials not recorded yet|r" end
+    local mats = PR.Mats(r)
+    if #mats == 0 then return "|cff9a9a9amaterials not recorded yet|r" end
     local have = holdings()
     local parts = {}
-    for _, m in ipairs(r.mats) do
+    for _, m in ipairs(mats) do
         local name = C.GetItemInfo(m.id)
         if not name then C.RequestLoad(m.id) end
         local icon = (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(m.id)) or (GetItemIcon and GetItemIcon(m.id))
@@ -495,4 +501,155 @@ function PR.TrainText(info)
     local who = info.fromTrainer and ("Trainer" .. (info.npc and (" " .. info.npc) or "") .. (info.zone and (", " .. info.zone) or ""))
         or "Needs"
     return who .. ": " .. table.concat(parts, ", ")
+end
+
+----------------------------------------------------------------------
+-- Live skill-up colors and chances. AtlasLoot stores, per recipe, the skill
+-- where it turns yellow and gray; green starts halfway between. Colors
+-- recorded when you opened the profession window go stale as you level,
+-- so these are worked out from your current skill instead.
+----------------------------------------------------------------------
+local thresholdCache = {}
+function PR.Thresholds(r)
+    if not r then return end
+    local key = r.spell or r.item
+    if key and thresholdCache[key] ~= nil then return thresholdCache[key] or nil end
+    local AL = _G.AtlasLoot
+    local P = AL and AL.Data and AL.Data.Profession
+    local d
+    if P then
+        local spell = r.spell
+        if (not spell or not P.GetProfessionData(spell)) and r.item and P.GetCraftSpellForCreatedItem then
+            local ok, s = pcall(P.GetCraftSpellForCreatedItem, r.item)
+            if ok then spell = s end
+        end
+        d = spell and P.GetProfessionData(spell)
+    end
+    local t = false
+    if d and d[4] and d[5] and d[5] > d[4] and d[4] > 0 then
+        t = { learn = d[3] or 0, yellow = d[4], gray = d[5], green = math.floor((d[4] + d[5]) / 2),
+              reagents = d[6], counts = d[7] }
+    end
+    if key then thresholdCache[key] = t end
+    return t or nil
+end
+
+local STALE_CHANCE = { optimal = 1, medium = 0.75, easy = 0.25, trivial = 0 }
+
+-- Chance of a skill point at `rank` (0 to 1), and the color name.
+function PR.Chance(r, rank)
+    local t = PR.Thresholds(r)
+    if t then
+        if rank < t.learn then return 0, "locked" end
+        if rank < t.yellow then return 1, "optimal" end
+        if rank >= t.gray then return 0, "trivial" end
+        local chance = (t.gray - rank) / (t.gray - t.yellow)
+        return chance, rank < t.green and "medium" or "easy"
+    end
+    -- No AtlasLoot data: use the color seen in the profession window.
+    return STALE_CHANCE[r.diff] or 0, r.diff or "trivial"
+end
+
+-- Materials for a recipe: as recorded, or from AtlasLoot when missing.
+function PR.Mats(r)
+    if r.mats and #r.mats > 0 then return r.mats end
+    local t = PR.Thresholds(r)
+    if t and t.reagents then
+        local mats = {}
+        for i, id in ipairs(t.reagents) do mats[#mats + 1] = { id = id, qty = t.counts and t.counts[i] or 1 } end
+        r.mats = mats
+        return mats
+    end
+    return {}
+end
+
+----------------------------------------------------------------------
+-- Leveling path: which recipes to make, how many, to reach a target skill,
+-- plus one combined shopping list. Picks the best chance per gold spent at
+-- every point, preferring recipes you have the materials for.
+----------------------------------------------------------------------
+local function craftCost(r)
+    local cost, have = 0, ns.Mats and ns.Mats.Holdings() or {}
+    for _, m in ipairs(PR.Mats(r)) do
+        local h = have[m.id] and have[m.id].total or 0
+        local missing = math.max(0, m.qty - h)
+        local price = ns.Prices.Market(m.id) or ((select(11, C.GetItemInfo(m.id)) or 0) * 4)
+        cost = cost + price * missing + price * (m.qty - missing) * 0.25  -- what you have counts a little
+    end
+    return cost
+end
+
+-- Returns { steps = { {name, r, from, to, crafts} }, mats = { [id] = qty }, reached, target, stuck }
+function PR.Path(profName, target)
+    local rank, max = PR.Rank(profName)
+    local rec = ns.char.recipes[profName]
+    if not rank or not rec then return end
+    target = math.min(target or max or rank, max or rank)
+    local cands = {}
+    for name, r in pairs(rec.list or {}) do
+        if r.learned ~= false and #PR.Mats(r) > 0 then
+            cands[#cands + 1] = { name = name, r = r, cost = craftCost(r), uses = 0 }
+        end
+    end
+    local steps, cur = {}, rank
+    local last
+    while cur < target do
+        local best, bestScore
+        for _, c in ipairs(cands) do
+            local chance = PR.Chance(c.r, cur)
+            -- Recipes without AtlasLoot data only count for a few points (their color is a guess).
+            if chance > 0 and (PR.Thresholds(c.r) or c.uses < 8) then
+                local score = chance / (1 + c.cost / 5000)
+                if not bestScore or score > bestScore then best, bestScore = c, score end
+            end
+        end
+        if not best then break end
+        local chance = PR.Chance(best.r, cur)
+        local crafts = 1 / chance
+        if last and last.c == best then
+            last.crafts, last.to = last.crafts + crafts, cur + 1
+        else
+            last = { c = best, name = best.name, r = best.r, from = cur, to = cur + 1, crafts = crafts,
+                     color = select(2, PR.Chance(best.r, cur)) }
+            steps[#steps + 1] = last
+        end
+        best.uses = best.uses + 1
+        cur = cur + 1
+    end
+    local mats = {}
+    for _, s in ipairs(steps) do
+        s.crafts = math.ceil(s.crafts - 0.001)
+        for _, m in ipairs(PR.Mats(s.r)) do mats[m.id] = (mats[m.id] or 0) + m.qty * s.crafts end
+    end
+    return { steps = steps, mats = mats, reached = cur, target = target, from = rank, stuck = cur < target }
+end
+
+-- Trainer tiers you've seen (Apprentice/Journeyman/Expert/Artisan), cheapest first.
+function PR.TrainerTiers(profName)
+    local out = {}
+    for name, t in pairs(ns.db.trainer or {}) do
+        if t.prof == profName and (name:find("Journeyman") or name:find("Expert") or name:find("Artisan") or name:find("Apprentice")) then
+            out[#out + 1] = { name = name, skill = t.skill, cost = t.cost, level = t.level, npc = t.npc, zone = t.zone }
+        end
+    end
+    table.sort(out, function(a, b) return (a.skill or 0) < (b.skill or 0) end)
+    return out
+end
+
+-- Recipes a trainer you've visited teaches that you could learn right now.
+function PR.TrainableNow(profName)
+    local rank = PR.Rank(profName) or 0
+    local list = (ns.char.recipes[profName] or {}).list or {}
+    local out, total = {}, 0
+    for name, t in pairs(ns.db.trainer or {}) do
+        if t.prof == profName and (t.skill or 0) <= rank and (t.level or 0) <= UnitLevel("player") then
+            local r = list[name]
+            if r and r.learned == false then
+                out[#out + 1] = { name = name, cost = t.cost or 0 }
+                total = total + (t.cost or 0)
+            end
+        end
+    end
+    table.sort(out, function(a, b) return a.name < b.name end)
+    return out, total
 end
